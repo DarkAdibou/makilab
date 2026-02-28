@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.db
+auth_info_baileys/
+logs/
+.DS_Store
+*.js.map
+.pnpm-store/

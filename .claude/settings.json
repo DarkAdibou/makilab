@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp:*)",
+      "mcp__claude_ai_Gmail__gmail_search_messages",
+      "Bash(node --version:*)",
+      "Bash(git --version:*)",
+      "Bash(docker --version:*)",
+      "Bash(npm:*)",
+      "Bash(pnpm --version:*)",
+      "Bash(\"d:/SynologyDrive/IA et:*)",
+      "Bash(pnpm install:*)"
+    ],
+    "additionalDirectories": [
+      "d:\\SynologyDrive\\IA et agents\\makilab\\docs"
+    ]
+  }
+}
