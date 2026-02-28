@@ -42,3 +42,33 @@ export const config = {
   obsidianRestApiKey: optional('OBSIDIAN_REST_API_KEY', ''),
   gmailAccessToken: optional('GMAIL_ACCESS_TOKEN', ''),
 } as const;
+
+/**
+ * Call at boot to validate env vars.
+ * Required vars missing → logs to stderr + exit(1).
+ * Optional vars missing → logs warnings (subagents degraded).
+ *
+ * Takes logger as param to avoid circular dependency (logger → config → logger).
+ */
+export function validateConfig(log: { fatal: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void; info: (obj: object, msg: string) => void }): void {
+  const missing: string[] = [];
+  if (!process.env['ANTHROPIC_API_KEY']) missing.push('ANTHROPIC_API_KEY');
+  if (!process.env['WHATSAPP_ALLOWED_NUMBER']) missing.push('WHATSAPP_ALLOWED_NUMBER');
+
+  if (missing.length > 0) {
+    log.fatal({ missing }, 'Missing required env vars — cannot start');
+    process.exit(1);
+  }
+
+  const optionalWarnings: string[] = [];
+  if (!process.env['OBSIDIAN_VAULT_PATH']) optionalWarnings.push('OBSIDIAN_VAULT_PATH (obsidian fallback disabled)');
+  if (!process.env['OBSIDIAN_REST_API_KEY']) optionalWarnings.push('OBSIDIAN_REST_API_KEY (obsidian REST disabled)');
+  if (!process.env['BRAVE_SEARCH_API_KEY']) optionalWarnings.push('BRAVE_SEARCH_API_KEY (web search disabled)');
+  if (!process.env['KARAKEEP_API_KEY']) optionalWarnings.push('KARAKEEP_API_KEY (karakeep disabled)');
+
+  for (const w of optionalWarnings) {
+    log.warn({ missing: w }, 'Optional env var not set');
+  }
+
+  log.info({ env: config.nodeEnv }, 'Config validated');
+}

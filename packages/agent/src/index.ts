@@ -5,9 +5,12 @@
  * 1. time/get → heure Sydney
  * 2. obsidian/search → recherche dans le vault réel
  */
-import { config } from './config.ts';
+import { config, validateConfig } from './config.ts';
+import { logger } from './logger.ts';
 import { runAgentLoop } from './agent-loop.ts';
 import { getAllSubAgents } from './subagents/registry.ts';
+
+validateConfig(logger);
 
 console.log(`🤖 Makilab Agent (${config.nodeEnv})`);
 console.log(`📂 Vault: ${config.obsidianVaultPath || '(non configuré)'}`);
