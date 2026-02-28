@@ -9,8 +9,10 @@ import { config, validateConfig } from './config.ts';
 import { logger } from './logger.ts';
 import { runAgentLoop } from './agent-loop.ts';
 import { getAllSubAgents } from './subagents/registry.ts';
+import { startCron } from './tasks/cron.ts';
 
 validateConfig(logger);
+startCron();
 
 console.log(`🤖 Makilab Agent (${config.nodeEnv})`);
 console.log(`📂 Vault: ${config.obsidianVaultPath || '(non configuré)'}`);

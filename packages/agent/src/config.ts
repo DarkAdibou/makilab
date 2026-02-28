@@ -34,6 +34,12 @@ export const config = {
   // Security
   webhookSecret: optional('WEBHOOK_SECRET', 'change_me_in_production'),
 
+  // CRON — all optional, disabled if not set
+  cronEnabled: optional('CRON_ENABLED', 'false') === 'true',
+  cronChannel: optional('CRON_CHANNEL', 'whatsapp') as 'whatsapp' | 'cli',
+  cronBriefingSchedule: optional('CRON_BRIEFING_SCHEDULE', '0 7 * * *'),
+  cronEveningSchedule: optional('CRON_EVENING_SCHEDULE', '0 19 * * *'),
+
   // Subagents — all optional, subagent gracefully disabled if key missing
   braveSearchApiKey: optional('BRAVE_SEARCH_API_KEY', ''),
   karakeepApiUrl: optional('KARAKEEP_API_URL', 'http://localhost:3000'),
