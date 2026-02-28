@@ -29,10 +29,24 @@
 
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
+import { Agent as HttpsAgent } from 'node:https';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { config } from '../config.ts';
 
-const OBSIDIAN_BASE = 'http://localhost:27123';
+// HTTPS port 27124 (default) — the plugin uses a self-signed certificate
+// We use a custom HTTPS agent that skips cert verification for localhost only
+const OBSIDIAN_BASE = 'https://127.0.0.1:27124';
+
+// Safe: only used for localhost Obsidian, never for external requests
+const localTlsAgent = new HttpsAgent({ rejectUnauthorized: false });
+
+function obsidianFetchOptions(extra: RequestInit = {}): RequestInit {
+  return {
+    ...extra,
+    // @ts-expect-error — Node.js fetch accepts `agent` but types don't expose it
+    agent: localTlsAgent,
+  };
+}
 
 function obsidianHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -45,10 +59,10 @@ function obsidianHeaders(): Record<string, string> {
 /** Check if Obsidian Local REST API is reachable */
 async function isObsidianLive(): Promise<boolean> {
   try {
-    const r = await fetch(`${OBSIDIAN_BASE}/`, {
+    const r = await fetch(`${OBSIDIAN_BASE}/`, obsidianFetchOptions({
       headers: obsidianHeaders(),
       signal: AbortSignal.timeout(2000),
-    });
+    }));
     return r.ok;
   } catch {
     return false;
@@ -167,7 +181,8 @@ export const obsidianSubAgent: SubAgent = {
 // ── LOCAL REST API ───────────────────────────────────────────────────────────
 
 async function apiReadNote(path: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`, { headers: obsidianHeaders() });
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+    obsidianFetchOptions({ headers: obsidianHeaders() }));
   if (r.status === 404) return { success: false, text: `Note non trouvée: ${path}`, error: 'Not found' };
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   const content = await r.text();
@@ -179,21 +194,15 @@ async function apiReadNote(path: string): Promise<SubAgentResult> {
 }
 
 async function apiCreateNote(path: string, content: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`, {
-    method: 'PUT',
-    headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' },
-    body: content,
-  });
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+    obsidianFetchOptions({ method: 'PUT', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: content }));
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Note créée: ${path}`, data: { path, source: 'api' } };
 }
 
 async function apiAppendNote(path: string, content: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`, {
-    method: 'POST',
-    headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' },
-    body: '\n' + content,
-  });
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+    obsidianFetchOptions({ method: 'POST', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: '\n' + content }));
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Contenu ajouté à: ${path}`, data: { path, source: 'api' } };
 }
@@ -201,7 +210,7 @@ async function apiAppendNote(path: string, content: string): Promise<SubAgentRes
 async function apiSearchVault(query: string, limit: number): Promise<SubAgentResult> {
   const r = await fetch(
     `${OBSIDIAN_BASE}/search/simple/?query=${encodeURIComponent(query)}&contextLength=150`,
-    { headers: obsidianHeaders() },
+    obsidianFetchOptions({ headers: obsidianHeaders() }),
   );
   if (!r.ok) throw new Error(`Obsidian search API ${r.status}`);
   const results = await r.json() as Array<{ filename: string; matches?: Array<{ context: string }> }>;
@@ -212,24 +221,21 @@ async function apiSearchVault(query: string, limit: number): Promise<SubAgentRes
   ).join('\n\n');
   return {
     success: true,
-    text: `${trimmed.length} note(s) pour "${query}" (via Obsidian):\n\n${formatted}`,
+    text: `${trimmed.length} note(s) pour "${query}" (via Obsidian REST):\n\n${formatted}`,
     data: trimmed,
   };
 }
 
 async function apiDailyNote(action: string, content?: string): Promise<SubAgentResult> {
   if (action === 'read') {
-    const r = await fetch(`${OBSIDIAN_BASE}/periodic/daily/`, { headers: obsidianHeaders() });
+    const r = await fetch(`${OBSIDIAN_BASE}/periodic/daily/`, obsidianFetchOptions({ headers: obsidianHeaders() }));
     if (!r.ok) throw new Error(`Obsidian daily ${r.status}`);
     const text = await r.text();
     return { success: true, text: `Journal du jour:\n\n${text.substring(0, 3000)}`, data: { content: text } };
   }
   if (action === 'append' && content) {
-    const r = await fetch(`${OBSIDIAN_BASE}/periodic/daily/`, {
-      method: 'POST',
-      headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' },
-      body: '\n' + content,
-    });
+    const r = await fetch(`${OBSIDIAN_BASE}/periodic/daily/`,
+      obsidianFetchOptions({ method: 'POST', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: '\n' + content }));
     if (!r.ok) throw new Error(`Obsidian daily append ${r.status}`);
     return { success: true, text: 'Ajouté au journal du jour', data: {} };
   }
