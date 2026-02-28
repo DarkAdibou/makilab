@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E2 terminé — Mémoire T1 SQLite ✅ — Docker à démarrer dès que RAM dispo
+## Statut global : 🟢 E3 terminé — Architecture subagents ✅ — Docker à démarrer dès que RAM dispo
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|---|---|
 | E1 | Foundation (monorepo, WhatsApp, boucle agentique) | 🔴 Critique | ✅ Terminé |
 | E2 | Mémoire T1 (SQLite, faits, compaction) | 🔴 Critique | ✅ Terminé |
-| E3 | Architecture subagents (registre, routing, composition) | 🔴 Critique | 🔲 Non démarré |
+| E3 | Architecture subagents (registre, routing, composition) | 🔴 Critique | ✅ Terminé |
 | E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | 🔲 Non démarré |
 | E5 | Smart Capture | 🔴 Critique | 🔲 Non démarré |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | 🔲 Non démarré |
@@ -56,11 +56,11 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 
 | Story | Titre | Statut |
 |---|---|---|
-| L3.1 | Interface SubAgent + contrat input/output typé | 🔲 |
-| L3.2 | Registre des subagents | 🔲 |
-| L3.3 | Routing orchestrateur → subagent(s) via LLM | 🔲 |
-| L3.4 | Composition workflows (séquentiel + parallèle) | 🔲 |
-| L3.5 | État subagent observable dans PostgreSQL | 🔲 |
+| L3.1 | Interface SubAgent + contrat input/output typé | ✅ |
+| L3.2 | Registre des subagents | ✅ |
+| L3.3 | Subagents exposés comme Anthropic tools (routing natif) | ✅ |
+| L3.4 | Composition : séquentiel implicite via tool_use loop | ✅ |
+| L3.5 | État subagent observable dans PostgreSQL | 🔲 (E6) |
 
 ## E4 — Subagents MVP
 
@@ -108,13 +108,13 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 ## Dernière session
 
 **Date :** 2026-02-28
-**Accompli :** E2 complet — SQLite via `node:sqlite` (builtin Node 24, zéro compilation) ✅, facts auto-extraction Haiku ✅, compaction automatique ✅, smoke test persistence validé ✅
+**Accompli :** E3 complet — Interface SubAgent ✅, registre ✅, subagents comme Anthropic tools (name: "subagent__action") ✅, smoke test routing validé ✅
 **Notes techniques :**
-- `better-sqlite3` abandonné → `node:sqlite` (builtin, pas de Visual Studio requis)
-- `--no-warnings` dans le script `dev` pour supprimer ExperimentalWarning
-- La DB `makilab.db` est au root du monorepo
-- Sur le NUC : Docker Compose ready (PostgreSQL, Qdrant, Redis, MinIO) — à lancer quand RAM dispo
-**Prochaine étape :** E3 — Architecture subagents
+- Les subagents sont exposés comme tools Anthropic natifs (format `subagent__action`)
+- Claude choisit lui-même quels subagents appeler via tool_use — pas besoin d'un routeur séparé
+- `orchestrator.ts` conservé mais non utilisé (simplifié via l'approche native Anthropic)
+- SubAgentName étendu avec 'time' dans packages/shared/src/index.ts
+**Prochaine étape :** E4 — Subagents MVP (Obsidian, Gmail, Web, Karakeep)
 
 ---
 

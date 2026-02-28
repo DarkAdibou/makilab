@@ -48,6 +48,7 @@ export interface Tool {
 
 // Subagents
 export type SubAgentName =
+  | 'time'
   | 'obsidian'
   | 'gmail'
   | 'web'

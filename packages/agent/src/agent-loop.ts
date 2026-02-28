@@ -3,27 +3,30 @@
  *
  * Core agentic loop for Makilab Agent.
  *
- * Implements the Anthropic tool-use pattern:
- * 1. Load memory context from SQLite (facts + history + summary)
- * 2. Send user message + history to Claude with memory-enriched system prompt
- * 3. If Claude wants to use a tool → execute it, feed result back
- * 4. Repeat until Claude gives a final text response or max iterations reached
- * 5. Persist exchange to SQLite + fire-and-forget fact extraction
- * 6. Auto-compact if message count exceeds threshold
+ * Architecture (E3+):
+ * - Subagents are exposed as Anthropic tools — Claude picks which to call
+ * - Each subagent action = one Anthropic tool (name: subagent__action)
+ * - Legacy tools (get_time) co-exist during transition
+ * - Memory context injected into system prompt each turn
+ *
+ * Flow per turn:
+ * 1. Load memory context (SQLite T1: facts + history + summary)
+ * 2. Build tool list from subagent registry + legacy tools
+ * 3. LLM call → may trigger tool_use (subagent calls)
+ * 4. Execute subagent actions, feed results back
+ * 5. Repeat until end_turn or max iterations
+ * 6. Persist exchange + fire-and-forget fact extraction + auto-compact
  *
  * Security:
- * - Max iterations enforced (config.agentMaxIterations) to prevent infinite loops
- * - Tool errors are caught and reported back to Claude gracefully
- * - Never leaks internal errors to the user as-is
- *
- * Extension points:
- * - Add tools in packages/agent/src/tools/index.ts
- * - Permission checks added in E3 (before tool execution)
+ * - Max iterations enforced to prevent infinite loops
+ * - Tool errors reported to Claude, never thrown to user
+ * - Permission checks: TODO E3 (before subagent execute)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.ts';
-import { findTool, tools } from './tools/index.ts';
+import { findTool, tools as legacyTools } from './tools/index.ts';
+import { getAllSubAgents, findSubAgent, buildCapabilitiesPrompt } from './subagents/registry.ts';
 import {
   loadMemoryContext,
   buildMemoryPrompt,
@@ -38,22 +41,15 @@ import type { AgentContext } from '@makilab/shared';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
-/**
- * Number of messages per channel before auto-compaction triggers.
- * When exceeded, oldest messages are summarized and pruned.
- */
 const COMPACTION_THRESHOLD = 30;
-
-/**
- * How many messages to compact in one pass.
- * Keeps the most recent 20 messages, summarizes the rest.
- */
 const COMPACT_KEEP_RECENT = 20;
 
 /**
- * Base system prompt injected into every conversation.
- * Memory facts from SQLite core_memory are appended dynamically.
+ * Separator used in tool names to identify subagent calls.
+ * Format: "subagent__action" (double underscore to avoid conflicts)
  */
+const SUBAGENT_SEP = '__';
+
 const BASE_SYSTEM_PROMPT = `Tu es Makilab, un agent personnel semi-autonome.
 Tu aides ton utilisateur avec ses tâches quotidiennes : emails, recherche, notes, bookmarks, etc.
 Tu réponds toujours en français sauf si on te parle dans une autre langue.
@@ -66,60 +62,71 @@ Principes fondamentaux :
 - En cas de doute, tu t'arrêtes et tu demandes
 - Tu ne contournes jamais une permission refusée`;
 
-/**
- * Summarize old messages and prune them from the database.
- * Called automatically when message count exceeds COMPACTION_THRESHOLD.
- * Fire-and-forget — errors are caught and logged.
- *
- * @param channel - The channel to compact
- */
+/** Build the full tool list: subagent actions + legacy tools */
+function buildToolList(): Anthropic.Tool[] {
+  const anthropicTools: Anthropic.Tool[] = [];
+
+  // Subagent actions as tools (name: "subagent__action")
+  for (const sa of getAllSubAgents()) {
+    for (const action of sa.actions) {
+      anthropicTools.push({
+        name: `${sa.name}${SUBAGENT_SEP}${action.name}`,
+        description: `[${sa.name}] ${action.description}`,
+        input_schema: action.inputSchema,
+      });
+    }
+  }
+
+  // Legacy tools (kept during transition, will be removed in E4)
+  for (const t of legacyTools) {
+    // Skip get_time — now handled by the time subagent
+    if (t.name === 'get_time') continue;
+    anthropicTools.push({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema,
+    });
+  }
+
+  return anthropicTools;
+}
+
+/** Auto-compact conversation history when too long (fire-and-forget) */
 async function compactHistory(channel: string): Promise<void> {
   try {
     const total = countMessages(channel);
     if (total <= COMPACTION_THRESHOLD) return;
 
-    // How many messages to compact: keep COMPACT_KEEP_RECENT most recent
     const toCompact = total - COMPACT_KEEP_RECENT;
     const oldMessages = getOldestMessages(channel, toCompact);
     if (oldMessages.length === 0) return;
 
     const lastId = oldMessages[oldMessages.length - 1]!.id;
-
-    // Build transcript for summarization
     const transcript = oldMessages
       .map((m) => `${m.role === 'user' ? 'USER' : 'AGENT'}: ${m.content}`)
       .join('\n');
 
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', // Cheap model for background tasks
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [
         {
           role: 'user',
           content: `Résume cet historique de conversation de façon concise.
 Garde les informations importantes : décisions prises, faits mentionnés, tâches accomplies ou en cours.
-Retourne uniquement le résumé, sans introduction.
-
-${transcript}`,
+Retourne uniquement le résumé, sans introduction.\n\n${transcript}`,
         },
       ],
     });
 
-    const summary =
-      response.content.find((b) => b.type === 'text')?.text ?? '';
-
+    const summary = response.content.find((b) => b.type === 'text')?.text ?? '';
     if (summary) {
       saveSummary(channel, summary, lastId);
       deleteMessagesUpTo(channel, lastId);
-      console.log(
-        `🗜️  Compaction [${channel}]: ${toCompact} messages → résumé (${summary.length} chars)`,
-      );
+      console.log(`🗜️  Compaction [${channel}]: ${toCompact} messages → résumé`);
     }
   } catch (err) {
-    console.error(
-      '⚠️  Compaction failed (non-critical):',
-      err instanceof Error ? err.message : err,
-    );
+    console.error('⚠️  Compaction failed:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -127,7 +134,7 @@ ${transcript}`,
  * Runs the agentic loop for a single user message.
  *
  * @param userMessage - The user's message text
- * @param context - Channel, sender, and optional conversation history (ignored in E2+, SQLite used instead)
+ * @param context - Channel, sender (history is loaded from SQLite in E2+)
  * @returns The agent's final text response
  */
 export async function runAgentLoop(
@@ -136,18 +143,19 @@ export async function runAgentLoop(
 ): Promise<string> {
   const channel = context.channel ?? 'cli';
 
-  // ── E2-L2.2: Load memory context ──────────────────────────────────────────
+  // ── Memory context ────────────────────────────────────────────────────────
   const memCtx = loadMemoryContext(channel);
   const memorySection = buildMemoryPrompt(memCtx);
-  const systemPrompt = memorySection
-    ? `${BASE_SYSTEM_PROMPT}\n\n${memorySection}`
-    : BASE_SYSTEM_PROMPT;
+  const capabilitiesSection = buildCapabilitiesPrompt();
 
-  // Build message history: use SQLite history (T1) instead of in-memory history
-  // Falls back to context.history if SQLite is empty (first run compatibility)
+  const systemParts = [BASE_SYSTEM_PROMPT];
+  if (memorySection) systemParts.push(memorySection);
+  if (capabilitiesSection) systemParts.push(capabilitiesSection);
+  const systemPrompt = systemParts.join('\n\n');
+
+  // Use SQLite history (T1), fall back to context.history if empty (first run)
   const sqliteHistory = memCtx.recentMessages;
-  const historyToUse =
-    sqliteHistory.length > 0 ? sqliteHistory : (context.history ?? []);
+  const historyToUse = sqliteHistory.length > 0 ? sqliteHistory : (context.history ?? []);
 
   const messages: Anthropic.MessageParam[] = [
     ...historyToUse.map((h) => ({
@@ -157,16 +165,11 @@ export async function runAgentLoop(
     { role: 'user', content: userMessage },
   ];
 
-  // Convert our Tool interface to Anthropic's format
-  const anthropicTools: Anthropic.Tool[] = tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema,
-  }));
-
+  const anthropicTools = buildToolList();
   let iterations = 0;
   let finalReply = '';
 
+  // ── Agentic loop ──────────────────────────────────────────────────────────
   while (iterations < config.agentMaxIterations) {
     iterations++;
 
@@ -178,14 +181,12 @@ export async function runAgentLoop(
       messages,
     });
 
-    // Claude finished — capture final response
     if (response.stop_reason === 'end_turn') {
       const textBlock = response.content.find((b) => b.type === 'text');
       finalReply = textBlock?.type === 'text' ? textBlock.text : '';
       break;
     }
 
-    // Claude wants to use tools — execute them and loop
     if (response.stop_reason === 'tool_use') {
       messages.push({ role: 'assistant', content: response.content });
 
@@ -194,61 +195,68 @@ export async function runAgentLoop(
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
 
-        const tool = findTool(block.name);
+        let resultContent: string;
 
-        if (!tool) {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: `Erreur : outil "${block.name}" introuvable dans le registre`,
-            is_error: true,
-          });
-          continue;
+        // Subagent call (name contains SUBAGENT_SEP)
+        if (block.name.includes(SUBAGENT_SEP)) {
+          const [subagentName, ...actionParts] = block.name.split(SUBAGENT_SEP);
+          const actionName = actionParts.join(SUBAGENT_SEP); // handle edge case
+          const subagent = findSubAgent(subagentName ?? '');
+
+          if (!subagent) {
+            resultContent = `Erreur : subagent "${subagentName}" introuvable`;
+          } else {
+            // TODO (E3): Check permissions before executing
+            // if (permission === 'denied') { resultContent = 'Action refusée'; }
+            // if (permission === 'confirm') { /* ask user */ }
+            console.log(`🔧 [${subagentName}/${actionName}]`);
+            const result = await subagent.execute(
+              actionName ?? '',
+              block.input as Record<string, unknown>,
+            );
+            resultContent = result.text;
+            if (!result.success && result.error) {
+              resultContent += `\nErreur: ${result.error}`;
+            }
+          }
+        } else {
+          // Legacy tool
+          const tool = findTool(block.name);
+          if (!tool) {
+            resultContent = `Erreur : outil "${block.name}" introuvable`;
+          } else {
+            try {
+              resultContent = await tool.execute(block.input as Record<string, unknown>);
+            } catch (err) {
+              resultContent = `Erreur lors de l'exécution de ${block.name}: ${err instanceof Error ? err.message : String(err)}`;
+            }
+          }
         }
 
-        try {
-          // TODO (E3): Check permissions before executing
-          // await permissionManager.check(tool.name, context.from);
-          const result = await tool.execute(
-            block.input as Record<string, unknown>,
-          );
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: result,
-          });
-        } catch (err) {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: `Erreur lors de l'exécution de ${block.name}: ${err instanceof Error ? err.message : String(err)}`,
-            is_error: true,
-          });
-        }
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: resultContent,
+        });
       }
 
       messages.push({ role: 'user', content: toolResults });
       continue;
     }
 
-    // Unexpected stop reason
-    break;
+    break; // Unexpected stop reason
   }
 
   if (!finalReply) {
     finalReply = `Désolé, j'ai atteint la limite d'itérations (${config.agentMaxIterations}). Reformule ta demande.`;
   }
 
-  // ── E2-L2.2: Persist exchange to SQLite ───────────────────────────────────
+  // ── Persist + background tasks ────────────────────────────────────────────
   saveMessage(channel, 'user', userMessage);
   saveMessage(channel, 'assistant', finalReply);
 
-  // ── E2-L2.3: Fire-and-forget fact extraction ──────────────────────────────
-  // Never awaited — errors are caught inside extractAndSaveFacts
   extractAndSaveFacts(userMessage, finalReply, channel).catch(() => {});
 
-  // ── E2-L2.4: Auto-compaction (background) ─────────────────────────────────
-  // Triggers when message count exceeds threshold
   const msgCount = countMessages(channel);
   if (msgCount > COMPACTION_THRESHOLD) {
     compactHistory(channel).catch(() => {});
