@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E4.5 terminé — Hardening ✅ — Prochaine étape : E6 Tâches + CRON
+## Statut global : 🟢 E6 terminé — Tâches + CRON ✅ — Prochaine étape : E7 Mission Control
 
 ---
 
@@ -16,7 +16,7 @@
 | E3 | Architecture subagents (registre, routing, composition) | 🔴 Critique | ✅ Terminé |
 | E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | ✅ Terminé |
 | E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
-| E6 | Gestionnaire de tâches + CRON | 🟠 Important | 🔲 Non démarré |
+| E6 | Gestionnaire de tâches + CRON | 🟠 Important | ✅ Terminé |
 | E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | 🔲 Non démarré |
 | E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré |
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | 🔲 Non démarré |
@@ -94,13 +94,15 @@ Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
 
 ## E6 — Tâches + CRON
 
+Plan détaillé : `docs/plans/2026-02-28-e6-tasks-cron.md`
+
 | Story | Titre | Statut |
 |---|---|---|
-| L6.1 | PostgreSQL + table tasks + schéma steps | 🔲 |
-| L6.2 | SubAgent Tasks (CRUD) | 🔲 |
-| L6.3 | Exécution workflows multi-étapes | 🔲 |
-| L6.4 | CRON scheduler + création de tâches automatiques | 🔲 |
-| L6.5 | Notifications canal sur changement statut | 🔲 |
+| L6.1 | SQLite tasks + task_steps tables + CRUD functions | ✅ |
+| L6.2 | SubAgent Tasks (create, list, get, update) | ✅ |
+| L6.3 | Task Runner — exécution workflows multi-étapes séquentiels | ✅ |
+| L6.4 | CRON scheduler — briefing matin + résumé soir (node-cron) | ✅ |
+| L6.5 | 9 tests Vitest — CRUD tasks, steps, workflow structure | ✅ |
 
 ## E7 — Mission Control
 
@@ -127,50 +129,39 @@ Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
 - E4 ✅ Subagents MVP — web ✅, karakeep ✅, obsidian ✅ (dual REST+file), gmail ✅ (squelette)
 - E5 ✅ Smart Capture — classify (Haiku) + route (Obsidian + Karakeep) + fix encodePath
 - E4.5 ✅ Hardening — Pino logger + validateConfig() + 17 tests Vitest
+- E6 ✅ Tâches + CRON — SQLite tasks/steps, SubAgent tasks, workflow runner, CRON scheduler
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- Dernier commit : `test(E4.5): 14 tests Vitest — encodePath, routing, JSON strip, capabilities`
-- `pnpm dev:agent` fonctionne : logs JSON Pino, validateConfig() au boot, 6 subagents
-- `pnpm --filter @makilab/agent test` : 17 tests ✅ en 783ms
-- 6 subagents : time, web, karakeep, obsidian, gmail, **capture**
+- `pnpm dev:agent` : 7 subagents, logs Pino JSON, CRON disabled par défaut
+- `pnpm --filter @makilab/agent test` : 26 tests ✅ (17 hardening + 9 tasks)
+- 7 subagents : time, web, karakeep, obsidian, gmail, capture, **tasks**
 
-**E4.5 Hardening — Détails techniques :**
-- `logger.ts` singleton Pino : JSON structuré stdout, `{ service: 'makilab-agent', level, time }`
-- `validateConfig(log)` : prend le logger en paramètre (évite dépendance circulaire logger↔config)
-- Pino remplace tous les `console.log/error` dans `agent-loop.ts` et `fact-extractor.ts`
-- 17 tests Vitest dans `packages/agent/src/tests/hardening.test.ts` :
-  - `encodePath` (4) — encode segments, préserve `/`
-  - `buildCapabilitiesPrompt` (2) — liste tous les subagents et leurs actions
-  - `JSON fence stripping` (4) — strip ```json``` avant parse
-  - `capture ROUTING_MAP` (4) — coverage complète de tous les CaptureType
-  - `buildObsidianPath sanitization` (3) — forbidden chars, truncation, clean title
-
-**Architecture subagent capture (E5) :**
-- `capture.ts` — 2 actions :
-  - `classify` : Haiku analyse le contenu → type + confiance + destinations + entities
-  - `route` : écrit dans Obsidian (toujours) + Karakeep (si URL/company)
-- Logique confiance : > 0.8 auto, 0.5-0.8 Claude propose, < 0.5 inbox
-- Routing par type : url→karakeep+obsidian, idea/snippet/quote→obsidian seulement
-- Frontmatter YAML automatique : type, captured, tags, url, name
-- Fix `encodePath()` dans obsidian.ts : encode chaque segment séparément (pas les `/`)
+**E6 Tâches + CRON — Détails techniques :**
+- Tables SQLite : `tasks` (10 colonnes, 2 index) + `task_steps` (13 colonnes, 1 index)
+- CRUD : createTask, getTask, listTasks, updateTaskStatus, addTaskStep, updateTaskStep, getTaskSteps
+- SubAgent tasks : 4 actions (create, list, get, update) — accessible via Claude tool_use
+- `runner.ts` : exécute des WorkflowStep[] séquentiellement, persist chaque étape en SQLite
+- `cron.ts` : node-cron, 2 jobs (briefing matin 07:00, résumé soir 19:00), CRON_ENABLED=true pour activer
+- Config : `CRON_ENABLED`, `CRON_CHANNEL`, `CRON_BRIEFING_SCHEDULE`, `CRON_EVENING_SCHEDULE`
 
 **Notes techniques clés :**
 - `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
-- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `capture__classify`)
-- `--no-warnings` dans scripts Node pour ExperimentalWarning SQLite
-- DB `makilab.db` au root du monorepo
-- tsconfig : `allowImportingTsExtensions: true` + `noEmit: true` (imports .ts)
-- `encodePath(path)` = `path.split('/').map(encodeURIComponent).join('/')` — critique pour sous-dossiers
-- `validateConfig(log)` — pattern paramètre pour éviter circular dep (logger imports config)
+- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `tasks__create`)
+- `JsonSchemaProperty` union type (string/number/boolean/array/object) avec enum + default
+- `findSubAgent()` pour appels inter-subagents (pas d'import direct)
+- `validateConfig(log)` — pattern paramètre pour éviter circular dep
+- `encodePath(path)` — encode chaque segment URI séparément, préserve `/`
 
 **Variables .env configurées :**
 ```
 OBSIDIAN_VAULT_PATH=d:/SynologyDrive/#Obsidian/obsidian-perso
-OBSIDIAN_REST_API_KEY=c18b1022a3fc15106299f94abfeaede9ac585478f39d2d48c370b11f24839cf0
-BRAVE_SEARCH_API_KEY=    # à remplir — https://brave.com/search/api/
-KARAKEEP_API_KEY=         # à remplir — Karakeep → Settings → API Keys
-GMAIL_ACCESS_TOKEN=       # à remplir à E8 (OAuth2)
+OBSIDIAN_REST_API_KEY=...
+BRAVE_SEARCH_API_KEY=    # à remplir
+KARAKEEP_API_KEY=         # à remplir
+GMAIL_ACCESS_TOKEN=       # à remplir à E8
+CRON_ENABLED=false        # true pour activer les CRON jobs
+CRON_CHANNEL=whatsapp     # ou cli
 ```
 
 ---
@@ -193,6 +184,6 @@ Fichiers clés :
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅
-On reprend à : E6 — Gestionnaire de tâches + CRON (PostgreSQL, SubAgent Tasks, workflows multi-étapes)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅
+On reprend à : E7 — Mission Control (Next.js 15, design system Apex-inspired, chat, tasks, logs)
 ```
