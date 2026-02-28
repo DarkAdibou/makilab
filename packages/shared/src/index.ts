@@ -53,6 +53,7 @@ export type SubAgentName =
   | 'gmail'
   | 'web'
   | 'karakeep'
+  | 'capture'
   | 'tasks'
   | 'code'
   | 'indeed'
