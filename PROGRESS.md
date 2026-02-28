@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E3 terminé — Architecture subagents ✅ — Docker à démarrer dès que RAM dispo
+## Statut global : 🟢 E4 terminé — Subagents MVP ✅ — Prochaine étape : E5 Smart Capture
 
 ---
 
@@ -14,7 +14,7 @@
 | E1 | Foundation (monorepo, WhatsApp, boucle agentique) | 🔴 Critique | ✅ Terminé |
 | E2 | Mémoire T1 (SQLite, faits, compaction) | 🔴 Critique | ✅ Terminé |
 | E3 | Architecture subagents (registre, routing, composition) | 🔴 Critique | ✅ Terminé |
-| E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | 🔲 Non démarré |
+| E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | ✅ Terminé |
 | E5 | Smart Capture | 🔴 Critique | 🔲 Non démarré |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | 🔲 Non démarré |
 | E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | 🔲 Non démarré |
@@ -66,10 +66,10 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 
 | Story | Titre | Statut |
 |---|---|---|
-| L4.1 | SubAgent Obsidian (lire, créer, modifier, rechercher) | 🔲 |
-| L4.2 | SubAgent Gmail (lire, chercher, résumer) | 🔲 |
-| L4.3 | SubAgent Web (Brave Search + fetch + résumé) | 🔲 |
-| L4.4 | SubAgent Karakeep (bookmark, tag, rechercher) | 🔲 |
+| L4.1 | SubAgent Obsidian (lire, créer, modifier, rechercher) | ✅ |
+| L4.2 | SubAgent Gmail (squelette — OAuth2 différé à E8) | ✅ |
+| L4.3 | SubAgent Web (Brave Search + fetch + résumé) | ✅ |
+| L4.4 | SubAgent Karakeep (bookmark, tag, rechercher) | ✅ |
 
 ## E5 — Smart Capture
 
@@ -112,32 +112,40 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 - E1 ✅ Foundation (monorepo, WhatsApp Gateway, agent loop)
 - E2 ✅ Mémoire T1 SQLite (node:sqlite builtin, facts, compaction)
 - E3 ✅ Architecture subagents (types, registre, routing via Anthropic tools)
-- E4 🔄 En cours — web.ts ✅, karakeep.ts ✅, Obsidian et Gmail restent à faire
+- E4 ✅ Subagents MVP — web ✅, karakeep ✅, obsidian ✅ (dual REST+file), gmail ✅ (squelette)
 
 **État du code :**
-- GitHub : https://github.com/DarkAdibou/makilab.git (branch: master, 4 commits)
-- Dernier commit : `feat(E4-partial): subagents Web + Karakeep (WIP)`
-- `pnpm dev:agent` fonctionne et valide le routing subagent
+- GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
+- Dernier commit : `fix(E4): Obsidian REST API — HTTPS port 27124 + self-signed cert bypass`
+- `pnpm dev:agent` fonctionne : smoke test validé (vault Obsidian réel, 4 notes makilab + 10 agent)
 
-**Ce qui reste pour finir E4 :**
-1. `packages/agent/src/subagents/obsidian.ts` — utiliser plugin "Local REST API" Obsidian (port 27123)
-2. `packages/agent/src/subagents/gmail.ts` — wrapper Gmail MCP ou API Gmail directe
-3. Enregistrer les 4 subagents dans `registry.ts` (web, karakeep, obsidian, gmail)
-4. Smoke test avec vraies clés dans `.env`
+**Architecture subagents E4 :**
+- `obsidian.ts` — dual-mode : HTTPS 127.0.0.1:27124 (primaire) + fichiers .md directs (fallback)
+  - Plugin utilise HTTPS avec cert auto-signé → `HttpsAgent({ rejectUnauthorized: false })` localhost only
+  - Actions : read, create, append, search, daily
+- `gmail.ts` — squelette Gmail REST API (GMAIL_ACCESS_TOKEN) ; OAuth2 différé à E8
+  - Actions : search, read, draft, unread
+- `web.ts` — Brave Search API + fetch URL avec strip HTML
+  - Actions : search, fetch
+- `karakeep.ts` — REST API wrapper (POST /bookmarks/search pour search)
+  - Actions : search, create, list, get
+- `registry.ts` — 5 subagents enregistrés : time, web, karakeep, obsidian, gmail
 
-**Variables .env à ajouter :**
+**Variables .env configurées :**
 ```
-BRAVE_SEARCH_API_KEY=...        # https://brave.com/search/api/ (gratuit 2000 req/mois)
-KARAKEEP_API_URL=http://localhost:3000
-KARAKEEP_API_KEY=...            # Karakeep → Settings → API Keys
 OBSIDIAN_VAULT_PATH=d:/SynologyDrive/#Obsidian/obsidian-perso
+OBSIDIAN_REST_API_KEY=c18b1022a3fc15106299f94abfeaede9ac585478f39d2d48c370b11f24839cf0
+BRAVE_SEARCH_API_KEY=    # à remplir — https://brave.com/search/api/
+KARAKEEP_API_KEY=         # à remplir — Karakeep → Settings → API Keys
+GMAIL_ACCESS_TOKEN=       # à remplir à E8 (OAuth2)
 ```
 
 **Notes techniques clés :**
 - `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
-- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `web__search`)
+- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `obsidian__search`)
 - `--no-warnings` dans scripts Node pour ExperimentalWarning SQLite
 - DB `makilab.db` au root du monorepo
+- tsconfig : `allowImportingTsExtensions: true` + `noEmit: true` (imports .ts)
 
 ---
 
@@ -159,6 +167,6 @@ Fichiers clés :
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 🔄
-On reprend à : E4 — finir Obsidian + Gmail subagents, les enregistrer dans registry.ts, smoke test
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅
+On reprend à : E5 — Smart Capture (classification LLM + routing confiance + Local First)
 ```
