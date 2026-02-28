@@ -17,6 +17,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import type { CaptureClassification, CaptureType } from '@makilab/shared';
 import { config } from '../config.ts';
+import { findSubAgent } from './registry.ts';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
@@ -220,27 +221,29 @@ async function routeContent(classification: CaptureClassification & { content: s
 
   // ── Obsidian ────────────────────────────────────────────────────────────────────────────────────
   if (destinations.includes('obsidian')) {
-    try {
-      const { obsidianSubAgent } = await import('./obsidian.ts');
+    const obsidian = findSubAgent('obsidian');
+    if (!obsidian) {
+      errors.push('Obsidian: subagent non trouvé dans le registry');
+    } else {
       const path = buildObsidianPath(type, entities);
       const mdContent = buildObsidianContent(content, type, entities);
-      const result = await obsidianSubAgent.execute('create', { path, content: mdContent });
+      const result = await obsidian.execute('create', { path, content: mdContent });
       if (result.success) {
         results.push(`📝 Obsidian : ${path}`);
       } else {
         errors.push(`Obsidian: ${result.error ?? result.text}`);
       }
-    } catch (err) {
-      errors.push(`Obsidian: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   // ── Karakeep ───────────────────────────────────────────────────────────────────────────────────
   if (destinations.includes('karakeep') && (entities['url'] ?? type === 'company')) {
-    try {
-      const { karakeepSubAgent } = await import('./karakeep.ts');
+    const karakeep = findSubAgent('karakeep');
+    if (!karakeep) {
+      errors.push('Karakeep: subagent non trouvé dans le registry');
+    } else {
       const tags = entities['tags'] ? entities['tags'].split(',').map((t) => t.trim()) : [type];
-      const result = await karakeepSubAgent.execute('create', {
+      const result = await karakeep.execute('create', {
         url: entities['url'] ?? '',
         title: entities['title'] ?? content.substring(0, 60),
         tags: JSON.stringify(tags),
@@ -250,8 +253,6 @@ async function routeContent(classification: CaptureClassification & { content: s
       } else {
         errors.push(`Karakeep: ${result.error ?? result.text}`);
       }
-    } catch (err) {
-      errors.push(`Karakeep: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

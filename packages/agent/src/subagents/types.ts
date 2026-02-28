@@ -19,6 +19,17 @@
 import type { SubAgentName } from '@makilab/shared';
 
 /**
+ * JSON Schema property definition (subset of draft-07).
+ * Supports string, number, boolean, arrays, enums, and nested objects.
+ */
+export type JsonSchemaProperty =
+  | { type: 'string'; description: string; enum?: string[]; default?: string }
+  | { type: 'number'; description: string; default?: number }
+  | { type: 'boolean'; description: string; default?: boolean }
+  | { type: 'array'; description: string; items: JsonSchemaProperty }
+  | { type: 'object'; description: string; properties: Record<string, JsonSchemaProperty>; required?: string[] };
+
+/**
  * A single capability exposed by a subagent.
  * Maps directly to a row in the `permissions` table.
  */
@@ -27,10 +38,10 @@ export interface SubAgentAction {
   name: string;
   /** Human-readable description — used by the LLM router to understand what this does */
   description: string;
-  /** JSON Schema for the input parameters */
+  /** JSON Schema for the input parameters (subset of JSON Schema draft-07) */
   inputSchema: {
     type: 'object';
-    properties: Record<string, { type: string; description: string }>;
+    properties: Record<string, JsonSchemaProperty>;
     required: string[];
   };
 }
