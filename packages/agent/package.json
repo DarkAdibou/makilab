@@ -8,18 +8,16 @@
     "./config": "./src/config.ts"
   },
   "scripts": {
-    "dev": "node --import tsx/esm src/index.ts",
+    "dev": "node --no-warnings --import tsx/esm src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
     "@makilab/shared": "workspace:*",
-    "better-sqlite3": "^11.0.0",
     "dotenv": "^16.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.0.0",
     "typescript": "*"
