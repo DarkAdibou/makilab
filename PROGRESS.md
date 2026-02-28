@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E4 terminé — Subagents MVP ✅ — Prochaine étape : E5 Smart Capture
+## Statut global : 🟢 E5 terminé — Smart Capture ✅ — Prochaine étape : E6 Tâches + CRON
 
 ---
 
@@ -15,7 +15,7 @@
 | E2 | Mémoire T1 (SQLite, faits, compaction) | 🔴 Critique | ✅ Terminé |
 | E3 | Architecture subagents (registre, routing, composition) | 🔴 Critique | ✅ Terminé |
 | E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | ✅ Terminé |
-| E5 | Smart Capture | 🔴 Critique | 🔲 Non démarré |
+| E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | 🔲 Non démarré |
 | E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | 🔲 Non démarré |
 | E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré |
@@ -73,12 +73,14 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 
 ## E5 — Smart Capture
 
+Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
+
 | Story | Titre | Statut |
 |---|---|---|
-| L5.1 | Classification LLM du contenu (type + confiance) | 🔲 |
-| L5.2 | Routing vers destination(s) selon type détecté | 🔲 |
-| L5.3 | Logique confidence (auto / propose / inbox) | 🔲 |
-| L5.4 | Local First : consultation Karakeep+Obsidian avant web | 🔲 |
+| L5.1 | Classification LLM du contenu (type + confiance) | ✅ |
+| L5.2 | Routing vers destination(s) selon type détecté | ✅ |
+| L5.3 | Logique confidence (auto / propose / inbox) | ✅ |
+| L5.4 | Local First : consultation Karakeep+Obsidian avant web | ✅ |
 
 ## E6 — Tâches + CRON
 
@@ -99,7 +101,7 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 | L7.3 | Command Center — activity feed + stat cards | 🔲 |
 | L7.4 | Tasks — vue tâches agentiques temps réel | 🔲 |
 | L7.5 | Logs — stream temps réel | 🔲 |
-| L7.6 | Connections — statut subagents + MCP | 🔲 |
+| L7.6 | Connections — statut subagents + capabilities listing | 🔲 |
 | L7.7 | CRON — config + lancement manuel | 🔲 |
 | L7.8 | Settings — LLM Router + Subagents + Canaux + Sécurité | 🔲 |
 
@@ -113,23 +115,30 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 - E2 ✅ Mémoire T1 SQLite (node:sqlite builtin, facts, compaction)
 - E3 ✅ Architecture subagents (types, registre, routing via Anthropic tools)
 - E4 ✅ Subagents MVP — web ✅, karakeep ✅, obsidian ✅ (dual REST+file), gmail ✅ (squelette)
+- E5 ✅ Smart Capture — classify (Haiku) + route (Obsidian + Karakeep) + fix encodePath
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- Dernier commit : `fix(E4): Obsidian REST API — HTTPS port 27124 + self-signed cert bypass`
-- `pnpm dev:agent` fonctionne : smoke test validé (vault Obsidian réel, 4 notes makilab + 10 agent)
+- Dernier commit : `fix(obsidian): encodePath — preserve '/' separators in vault paths`
+- `pnpm dev:agent` fonctionne : capture URL → `Captures/URLs/`, idée → `Captures/Ideas/`
+- 6 subagents : time, web, karakeep, obsidian, gmail, **capture**
 
-**Architecture subagents E4 :**
-- `obsidian.ts` — dual-mode : HTTPS 127.0.0.1:27124 (primaire) + fichiers .md directs (fallback)
-  - Plugin utilise HTTPS avec cert auto-signé → `HttpsAgent({ rejectUnauthorized: false })` localhost only
-  - Actions : read, create, append, search, daily
-- `gmail.ts` — squelette Gmail REST API (GMAIL_ACCESS_TOKEN) ; OAuth2 différé à E8
-  - Actions : search, read, draft, unread
-- `web.ts` — Brave Search API + fetch URL avec strip HTML
-  - Actions : search, fetch
-- `karakeep.ts` — REST API wrapper (POST /bookmarks/search pour search)
-  - Actions : search, create, list, get
-- `registry.ts` — 5 subagents enregistrés : time, web, karakeep, obsidian, gmail
+**Architecture subagent capture (E5) :**
+- `capture.ts` — 2 actions :
+  - `classify` : Haiku analyse le contenu → type + confiance + destinations + entities
+  - `route` : écrit dans Obsidian (toujours) + Karakeep (si URL/company)
+- Logique confiance : > 0.8 auto, 0.5-0.8 Claude propose, < 0.5 inbox
+- Routing par type : url→karakeep+obsidian, idea/snippet/quote→obsidian seulement
+- Frontmatter YAML automatique : type, captured, tags, url, name
+- Fix `encodePath()` dans obsidian.ts : encode chaque segment séparément (pas les `/`)
+
+**Notes techniques clés :**
+- `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
+- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `capture__classify`)
+- `--no-warnings` dans scripts Node pour ExperimentalWarning SQLite
+- DB `makilab.db` au root du monorepo
+- tsconfig : `allowImportingTsExtensions: true` + `noEmit: true` (imports .ts)
+- `encodePath(path)` = `path.split('/').map(encodeURIComponent).join('/')` — critique pour sous-dossiers
 
 **Variables .env configurées :**
 ```
@@ -139,13 +148,6 @@ BRAVE_SEARCH_API_KEY=    # à remplir — https://brave.com/search/api/
 KARAKEEP_API_KEY=         # à remplir — Karakeep → Settings → API Keys
 GMAIL_ACCESS_TOKEN=       # à remplir à E8 (OAuth2)
 ```
-
-**Notes techniques clés :**
-- `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
-- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `obsidian__search`)
-- `--no-warnings` dans scripts Node pour ExperimentalWarning SQLite
-- DB `makilab.db` au root du monorepo
-- tsconfig : `allowImportingTsExtensions: true` + `noEmit: true` (imports .ts)
 
 ---
 
@@ -167,6 +169,6 @@ Fichiers clés :
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅
-On reprend à : E5 — Smart Capture (classification LLM + routing confiance + Local First)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅
+On reprend à : E6 — Gestionnaire de tâches + CRON (PostgreSQL, SubAgent Tasks, workflows multi-étapes)
 ```
