@@ -22,6 +22,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.ts';
 import { setFact, getCoreMemory } from './sqlite.ts';
+import { logger } from '../logger.ts';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
@@ -87,10 +88,10 @@ AGENT: ${assistantReply}`;
 
     const count = Object.keys(facts).length;
     if (count > 0) {
-      console.log(`🧠 ${count} fait(s) extrait(s) depuis [${channel}]`);
+      logger.info({ channel, count }, 'Facts extracted');
     }
   } catch (err) {
     // Never let fact extraction break the main flow
-    console.error('⚠️  Fact extraction failed (non-critical):', err instanceof Error ? err.message : err);
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Fact extraction failed (non-critical)');
   }
 }
