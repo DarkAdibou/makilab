@@ -33,4 +33,4 @@ const r2 = await runAgentLoop('Cherche dans mon vault Obsidian des notes sur "ma
 console.log('🤖', r2);
 console.log('');
 
-console.log('✅ E4 smoke test complet');
+console.log('✅ E5 smoke test complet');

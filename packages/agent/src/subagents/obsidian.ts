@@ -180,8 +180,13 @@ export const obsidianSubAgent: SubAgent = {
 
 // ── LOCAL REST API ───────────────────────────────────────────────────────────
 
+/** Encode a vault path: encode each segment but keep '/' separators */
+function encodePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
 async function apiReadNote(path: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`,
     obsidianFetchOptions({ headers: obsidianHeaders() }));
   if (r.status === 404) return { success: false, text: `Note non trouvée: ${path}`, error: 'Not found' };
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
@@ -194,14 +199,14 @@ async function apiReadNote(path: string): Promise<SubAgentResult> {
 }
 
 async function apiCreateNote(path: string, content: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`,
     obsidianFetchOptions({ method: 'PUT', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: content }));
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Note créée: ${path}`, data: { path, source: 'api' } };
 }
 
 async function apiAppendNote(path: string, content: string): Promise<SubAgentResult> {
-  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodeURIComponent(path)}`,
+  const r = await fetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`,
     obsidianFetchOptions({ method: 'POST', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: '\n' + content }));
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Contenu ajouté à: ${path}`, data: { path, source: 'api' } };
