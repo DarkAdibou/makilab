@@ -1,0 +1,580 @@
+# E5 Smart Capture Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Ajouter un subagent `capture` qui classifie automatiquement le contenu entrant (URL, note, idée, tâche, etc.) et le route vers Obsidian et/ou Karakeep avec une logique de confiance (auto / propose / inbox).
+
+**Architecture:** Un subagent dédié `capture` expose deux actions : `classify` (LLM Haiku pour classer le contenu) et `route` (exécute le routing vers les destinations). Claude l'appelle naturellement via tool_use comme les autres subagents. La logique confiance est dans le subagent : > 0.8 = auto, 0.5-0.8 = Claude propose à l'utilisateur, < 0.5 = inbox Obsidian sans action. Local First : on consulte Obsidian + Karakeep avant de décider si une note existe déjà.
+
+**Tech Stack:** Node.js 24, TypeScript strict, SDK Anthropic (Haiku pour classification), types CaptureType/CaptureClassification déjà dans @makilab/shared.
+
+---
+
+## Contexte codebase
+
+Fichiers clés à connaître avant de commencer :
+
+- `packages/shared/src/index.ts` — `CaptureType`, `CaptureClassification`, `SubAgentName` (à modifier)
+- `packages/agent/src/subagents/types.ts` — interface `SubAgent`, `SubAgentResult`
+- `packages/agent/src/subagents/registry.ts` — enregistrement des subagents
+- `packages/agent/src/subagents/obsidian.ts` — pour comprendre comment un subagent appelle l'API Obsidian
+- `packages/agent/src/config.ts` — variables d'env (anthropicApiKey disponible)
+- `packages/agent/src/agent-loop.ts` — boucle agentique, comment les tools sont appelés
+
+Types déjà disponibles dans `@makilab/shared` (ne pas recréer) :
+```typescript
+export type CaptureType = 'company' | 'contact' | 'url' | 'prompt' | 'snippet'
+  | 'idea' | 'meeting_note' | 'task' | 'quote' | 'unknown';
+
+export interface CaptureClassification {
+  type: CaptureType;
+  confidence: number; // 0-1
+  destinations: string[]; // ex: ['obsidian', 'karakeep']
+  entities: Record<string, string>; // ex: { url: 'https://...', title: '...' }
+}
+```
+
+---
+
+## Routing par type
+
+| Type | Destinations | Dossier Obsidian | Tag Karakeep |
+|------|-------------|------------------|--------------|
+| `url` | karakeep + obsidian si confiance > 0.8 | `Captures/URLs/` | `bookmark` |
+| `company` | karakeep + obsidian | `Captures/Companies/` | `company` |
+| `contact` | obsidian | `Captures/Contacts/` | — |
+| `idea` | obsidian | `Captures/Ideas/` | — |
+| `snippet` | obsidian | `Captures/Snippets/` | `snippet` |
+| `prompt` | obsidian | `Captures/Prompts/` | — |
+| `meeting_note` | obsidian | `Captures/Meetings/` | — |
+| `task` | obsidian | `Captures/Tasks/` | — |
+| `quote` | obsidian | `Captures/Quotes/` | — |
+| `unknown` | obsidian inbox | `Captures/Inbox/` | — |
+
+---
+
+## Task 1 : Ajouter 'capture' à SubAgentName
+
+**Files:**
+- Modify: `packages/shared/src/index.ts:50-61`
+
+**Step 1: Ajouter 'capture' à l'union SubAgentName**
+
+```typescript
+export type SubAgentName =
+  | 'time'
+  | 'obsidian'
+  | 'gmail'
+  | 'web'
+  | 'karakeep'
+  | 'capture'   // ← ajouter cette ligne
+  | 'tasks'
+  | 'code'
+  | 'indeed'
+  | 'notebooklm'
+  | 'calendar'
+  | 'drive';
+```
+
+**Step 2: Vérifier que le projet compile sans erreur**
+
+```bash
+cd d:/SynologyDrive/IA\ et\ agents/makilab
+pnpm --filter @makilab/agent exec tsc --noEmit
+```
+
+Expected: aucune erreur TypeScript.
+
+**Step 3: Commit**
+
+```bash
+git add packages/shared/src/index.ts
+git commit -m "feat(E5): add 'capture' to SubAgentName"
+```
+
+---
+
+## Task 2 : Créer le subagent capture — action `classify`
+
+**Files:**
+- Create: `packages/agent/src/subagents/capture.ts`
+
+L'action `classify` appelle Haiku avec un prompt de classification structuré et retourne un `CaptureClassification`. Elle ne fait **aucune** écriture — seulement l'analyse.
+
+**Step 1: Créer le fichier avec l'action classify**
+
+```typescript
+/**
+ * capture.ts — SubAgent: Smart Capture
+ *
+ * Classifie le contenu entrant et le route vers Obsidian et/ou Karakeep.
+ *
+ * Actions:
+ *   - classify : analyse le contenu et retourne type + confiance + destinations
+ *   - route    : exécute le routing vers les destinations détectées
+ *
+ * Logique confiance :
+ *   - > 0.8  : Claude route automatiquement (auto)
+ *   - 0.5-0.8 : Claude propose à l'utilisateur avant d'agir
+ *   - < 0.5  : Stocké dans Captures/Inbox/ sans classification
+ */
+
+import Anthropic from '@anthropic-ai/sdk';
+import type { SubAgent, SubAgentResult } from './types.ts';
+import type { CaptureClassification, CaptureType } from '@makilab/shared';
+import { config } from '../config.ts';
+
+const client = new Anthropic({ apiKey: config.anthropicApiKey });
+
+export const captureSubAgent: SubAgent = {
+  name: 'capture',
+  description:
+    'Classifie et route le contenu entrant (URL, note, idée, tâche, code, etc.) ' +
+    'vers Obsidian et/ou Karakeep. Utilise pour tout ce qui ressemble à une capture : ' +
+    '"note ça", "sauvegarde", "bookmark", "remember", URL nue, snippet de code, idée.',
+
+  actions: [
+    {
+      name: 'classify',
+      description: 'Analyse le contenu et détermine son type, sa confiance et ses destinations',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', description: 'Le contenu à classifier (texte, URL, note...)' },
+        },
+        required: ['content'],
+      },
+    },
+    {
+      name: 'route',
+      description: 'Route le contenu vers les destinations (obsidian, karakeep) selon la classification',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', description: 'Le contenu à router' },
+          type: { type: 'string', description: 'Type de capture (ex: url, idea, snippet...)' },
+          confidence: { type: 'string', description: 'Score de confiance 0-1' },
+          destinations: { type: 'string', description: 'Destinations JSON array (ex: ["obsidian","karakeep"])' },
+          entities: { type: 'string', description: 'Entités extraites JSON object (ex: {"url":"...","title":"..."})' },
+        },
+        required: ['content', 'type', 'confidence', 'destinations'],
+      },
+    },
+  ],
+
+  async execute(action: string, input: Record<string, unknown>): Promise<SubAgentResult> {
+    try {
+      if (action === 'classify') {
+        return await classifyContent(input['content'] as string);
+      }
+      if (action === 'route') {
+        const destinations = JSON.parse(input['destinations'] as string) as string[];
+        const entities = input['entities']
+          ? JSON.parse(input['entities'] as string) as Record<string, string>
+          : {};
+        return await routeContent({
+          content: input['content'] as string,
+          type: input['type'] as CaptureType,
+          confidence: parseFloat(input['confidence'] as string),
+          destinations,
+          entities,
+        });
+      }
+      return { success: false, text: `Action inconnue: ${action}`, error: `Unknown action: ${action}` };
+    } catch (err) {
+      return {
+        success: false,
+        text: 'Erreur Smart Capture',
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+};
+```
+
+**Step 2: Ajouter la fonction classifyContent après la définition du subagent**
+
+```typescript
+// ── Classification ────────────────────────────────────────────────────────────
+
+const CAPTURE_TYPES: CaptureType[] = [
+  'company', 'contact', 'url', 'prompt', 'snippet',
+  'idea', 'meeting_note', 'task', 'quote', 'unknown',
+];
+
+const ROUTING_MAP: Record<CaptureType, { destinations: string[]; obsidianFolder: string }> = {
+  url:          { destinations: ['karakeep', 'obsidian'], obsidianFolder: 'Captures/URLs' },
+  company:      { destinations: ['karakeep', 'obsidian'], obsidianFolder: 'Captures/Companies' },
+  contact:      { destinations: ['obsidian'],             obsidianFolder: 'Captures/Contacts' },
+  idea:         { destinations: ['obsidian'],             obsidianFolder: 'Captures/Ideas' },
+  snippet:      { destinations: ['obsidian'],             obsidianFolder: 'Captures/Snippets' },
+  prompt:       { destinations: ['obsidian'],             obsidianFolder: 'Captures/Prompts' },
+  meeting_note: { destinations: ['obsidian'],             obsidianFolder: 'Captures/Meetings' },
+  task:         { destinations: ['obsidian'],             obsidianFolder: 'Captures/Tasks' },
+  quote:        { destinations: ['obsidian'],             obsidianFolder: 'Captures/Quotes' },
+  unknown:      { destinations: ['obsidian'],             obsidianFolder: 'Captures/Inbox' },
+};
+
+async function classifyContent(content: string): Promise<SubAgentResult> {
+  const prompt = `Tu es un classifier de contenu. Analyse ce contenu et retourne un JSON.
+
+Types possibles : ${CAPTURE_TYPES.join(', ')}
+
+Règles :
+- "url" si c'est une URL (commence par http/https ou ressemble à un lien)
+- "company" si c'est une entreprise avec contexte business
+- "contact" si c'est une personne (nom + coordonnées ou contexte)
+- "snippet" si c'est du code
+- "prompt" si c'est un prompt AI
+- "idea" si c'est une idée, réflexion, concept
+- "meeting_note" si c'est une note de réunion
+- "task" si c'est une tâche à faire
+- "quote" si c'est une citation
+- "unknown" si tu n'es pas sûr
+
+Retourne UNIQUEMENT ce JSON (pas de markdown, pas d'explication) :
+{
+  "type": "<type>",
+  "confidence": <0.0-1.0>,
+  "title": "<titre court max 60 chars>",
+  "entities": {
+    "url": "<si présente>",
+    "name": "<si personne ou entreprise>",
+    "tags": "<tags séparés par virgule>"
+  }
+}
+
+Contenu à classifier :
+${content.substring(0, 2000)}`;
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 256,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = response.content.find((b) => b.type === 'text')?.text ?? '{}';
+  // Strip markdown code fences if present (Haiku sometimes wraps JSON)
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+  let parsed: { type?: string; confidence?: number; title?: string; entities?: Record<string, string> };
+  try {
+    parsed = JSON.parse(text) as typeof parsed;
+  } catch {
+    return {
+      success: false,
+      text: `Échec classification (JSON invalide): ${raw.substring(0, 100)}`,
+      error: 'Invalid JSON from classifier',
+    };
+  }
+
+  const type = (CAPTURE_TYPES.includes(parsed.type as CaptureType) ? parsed.type : 'unknown') as CaptureType;
+  const confidence = typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
+  const routing = ROUTING_MAP[type];
+  const entities = parsed.entities ?? {};
+  if (parsed.title) entities['title'] = parsed.title;
+
+  const classification: CaptureClassification = {
+    type,
+    confidence,
+    destinations: routing.destinations,
+    entities,
+  };
+
+  const confidenceLabel = confidence >= 0.8 ? '✅ auto' : confidence >= 0.5 ? '⚠️ à confirmer' : '📥 inbox';
+
+  return {
+    success: true,
+    text: `Classification : **${type}** (confiance: ${(confidence * 100).toFixed(0)}% ${confidenceLabel})\nDestinations : ${routing.destinations.join(', ')}\nEntités : ${JSON.stringify(entities)}`,
+    data: classification,
+  };
+}
+```
+
+**Step 3: Vérifier la syntaxe TypeScript**
+
+```bash
+cd d:/SynologyDrive/IA\ et\ agents/makilab
+pnpm --filter @makilab/agent exec tsc --noEmit
+```
+
+Expected: aucune erreur TypeScript.
+
+**Step 4: Commit**
+
+```bash
+git add packages/agent/src/subagents/capture.ts
+git commit -m "feat(E5): capture subagent — classify action (Haiku classifier)"
+```
+
+---
+
+## Task 3 : Ajouter l'action `route` dans capture.ts
+
+L'action `route` écrit dans Obsidian (toujours) et Karakeep (si dans les destinations). Elle construit le nom de fichier à partir du titre + date.
+
+**Files:**
+- Modify: `packages/agent/src/subagents/capture.ts` (ajouter la fonction routeContent en bas)
+
+**Step 1: Ajouter la fonction routeContent après classifyContent**
+
+```typescript
+// ── Routing ───────────────────────────────────────────────────────────────────
+
+function buildObsidianPath(type: CaptureType, entities: Record<string, string>): string {
+  const folder = ROUTING_MAP[type].obsidianFolder;
+  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const title = (entities['title'] ?? 'capture')
+    .replace(/[/\\:*?"<>|]/g, '-') // sanitize filename
+    .substring(0, 60);
+  return `${folder}/${date}-${title}.md`;
+}
+
+function buildObsidianContent(
+  content: string,
+  type: CaptureType,
+  entities: Record<string, string>,
+): string {
+  const date = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const tags = entities['tags'] ? entities['tags'].split(',').map((t) => t.trim()) : [type];
+  const frontmatter = [
+    '---',
+    `type: ${type}`,
+    `captured: ${date}`,
+    `tags: [${tags.join(', ')}]`,
+    entities['url'] ? `url: "${entities['url']}"` : null,
+    entities['name'] ? `name: "${entities['name']}"` : null,
+    '---',
+  ].filter(Boolean).join('\n');
+
+  return `${frontmatter}\n\n${content}`;
+}
+
+async function routeContent(classification: CaptureClassification & { content: string }): Promise<SubAgentResult> {
+  const { content, type, destinations, entities } = classification;
+  const results: string[] = [];
+  const errors: string[] = [];
+
+  // ── Obsidian ────────────────────────────────────────────────────────────────
+  if (destinations.includes('obsidian')) {
+    try {
+      const { obsidianSubAgent } = await import('./obsidian.ts');
+      const path = buildObsidianPath(type, entities);
+      const mdContent = buildObsidianContent(content, type, entities);
+      const result = await obsidianSubAgent.execute('create', { path, content: mdContent });
+      if (result.success) {
+        results.push(`📝 Obsidian : ${path}`);
+      } else {
+        errors.push(`Obsidian: ${result.error ?? result.text}`);
+      }
+    } catch (err) {
+      errors.push(`Obsidian: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // ── Karakeep ────────────────────────────────────────────────────────────────
+  if (destinations.includes('karakeep') && (entities['url'] ?? type === 'company')) {
+    try {
+      const { karakeepSubAgent } = await import('./karakeep.ts');
+      const tags = entities['tags'] ? entities['tags'].split(',').map((t) => t.trim()) : [type];
+      const result = await karakeepSubAgent.execute('create', {
+        url: entities['url'] ?? '',
+        title: entities['title'] ?? content.substring(0, 60),
+        tags: JSON.stringify(tags),
+      });
+      if (result.success) {
+        results.push(`🔖 Karakeep : bookmark créé`);
+      } else {
+        errors.push(`Karakeep: ${result.error ?? result.text}`);
+      }
+    } catch (err) {
+      errors.push(`Karakeep: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (results.length === 0 && errors.length === 0) {
+    return { success: false, text: 'Aucune destination exécutée', error: 'No destinations matched' };
+  }
+
+  const successText = results.length > 0 ? `Capture enregistrée :\n${results.join('\n')}` : '';
+  const errorText = errors.length > 0 ? `\nErreurs : ${errors.join(', ')}` : '';
+
+  return {
+    success: errors.length === 0,
+    text: successText + errorText,
+    data: { type, destinations, results, errors },
+  };
+}
+```
+
+**Step 2: Vérifier TypeScript**
+
+```bash
+pnpm --filter @makilab/agent exec tsc --noEmit
+```
+
+Expected: aucune erreur.
+
+**Step 3: Commit**
+
+```bash
+git add packages/agent/src/subagents/capture.ts
+git commit -m "feat(E5): capture subagent — route action (obsidian + karakeep)"
+```
+
+---
+
+## Task 4 : Enregistrer capture dans le registre
+
+**Files:**
+- Modify: `packages/agent/src/subagents/registry.ts`
+
+**Step 1: Ajouter l'import et l'enregistrement**
+
+Dans `registry.ts`, après l'import de `gmailSubAgent` :
+
+```typescript
+import { captureSubAgent } from './capture.ts';
+```
+
+Dans le tableau `SUBAGENTS` :
+
+```typescript
+const SUBAGENTS: SubAgent[] = [
+  getTimeSubAgent,
+  webSubAgent,
+  karakeepSubAgent,
+  obsidianSubAgent,
+  gmailSubAgent,
+  captureSubAgent,  // ← ajouter
+];
+```
+
+**Step 2: Vérifier TypeScript**
+
+```bash
+pnpm --filter @makilab/agent exec tsc --noEmit
+```
+
+Expected: aucune erreur.
+
+**Step 3: Commit**
+
+```bash
+git add packages/agent/src/subagents/registry.ts
+git commit -m "feat(E5): register capture subagent in registry"
+```
+
+---
+
+## Task 5 : Smoke test manuel E5
+
+**Files:**
+- Modify: `packages/agent/src/index.ts` (temporaire — ajout tests E5)
+
+**Step 1: Ajouter les tests E5 dans index.ts**
+
+À la fin du fichier, après les tests existants :
+
+```typescript
+await new Promise((r) => setTimeout(r, 1000));
+
+// Test 3 — Smart Capture: URL
+console.log('📨 Test 3: Smart Capture URL');
+const r3 = await runAgentLoop(
+  'Sauvegarde ça : https://platform.openai.com/docs/guides/function-calling — super doc sur le function calling',
+  { channel: CHANNEL, from: 'test', history: [] },
+);
+console.log('🤖', r3);
+console.log('');
+
+await new Promise((r) => setTimeout(r, 1000));
+
+// Test 4 — Smart Capture: idée
+console.log('📨 Test 4: Smart Capture idée');
+const r4 = await runAgentLoop(
+  'Note cette idée : ajouter un mode "lecture seule" à l\'agent pour l\'utiliser en démo sans risque d\'écriture',
+  { channel: CHANNEL, from: 'test', history: [] },
+);
+console.log('🤖', r4);
+console.log('');
+```
+
+**Step 2: Lancer le smoke test**
+
+```bash
+cd d:/SynologyDrive/IA\ et\ agents/makilab
+pnpm dev:agent
+```
+
+Expected pour Test 3 :
+- Claude appelle `capture__classify` avec l'URL
+- Retour : type=url, confidence > 0.8
+- Claude appelle `capture__route`
+- Résultat : "Capture enregistrée : 📝 Obsidian + 🔖 Karakeep" (si les API sont dispo)
+
+Expected pour Test 4 :
+- Claude appelle `capture__classify` avec l'idée
+- Retour : type=idea, confidence > 0.7
+- Claude appelle `capture__route`
+- Résultat : "Capture enregistrée : 📝 Obsidian : Captures/Ideas/..."
+
+**Step 3: Vérifier dans Obsidian**
+
+Ouvrir le vault `d:/SynologyDrive/#Obsidian/obsidian-perso` et vérifier qu'une note existe dans `Captures/Ideas/` avec le bon frontmatter YAML.
+
+**Step 4: Revenir à index.ts propre (retirer les tests E5 ajoutés)**
+
+```typescript
+// Supprimer les Test 3 et Test 4 ajoutés dans index.ts
+// Garder seulement les Test 1 et Test 2 existants
+```
+
+**Step 5: Commit final E5**
+
+```bash
+git add packages/agent/src/subagents/capture.ts packages/agent/src/subagents/registry.ts packages/shared/src/index.ts
+git commit -m "feat(E5): Smart Capture complet — classify + route (Obsidian + Karakeep)"
+git push origin master
+```
+
+---
+
+## Task 6 : Mettre à jour PROGRESS.md
+
+**Files:**
+- Modify: `PROGRESS.md`
+
+**Step 1: Marquer E5 terminé**
+
+- Ligne Epic E5 : `🔲 Non démarré` → `✅ Terminé`
+- Stories L5.1-L5.4 : toutes `🔲` → `✅`
+- Section "Dernière session" : date + résumé E5
+- Handoff prompt : `E5 ✅ / On reprend à : E6`
+
+**Step 2: Commit**
+
+```bash
+git add PROGRESS.md
+git commit -m "chore: PROGRESS.md — E5 terminé ✅"
+git push origin master
+```
+
+---
+
+## Résumé des fichiers touchés
+
+| Fichier | Action | Raison |
+|---------|--------|--------|
+| `packages/shared/src/index.ts` | Modify | Ajouter `'capture'` à SubAgentName |
+| `packages/agent/src/subagents/capture.ts` | Create | Nouveau subagent Smart Capture |
+| `packages/agent/src/subagents/registry.ts` | Modify | Enregistrer captureSubAgent |
+| `packages/agent/src/index.ts` | Modify (temp) | Smoke test E5 |
+| `PROGRESS.md` | Modify | État à jour |
+
+## Ce que E5 ne fait PAS (YAGNI)
+
+- Pas de deduplication (vérifier si l'URL existe déjà dans Karakeep) — E9 avec Qdrant
+- Pas de webhook "capture rapide" — E8
+- Pas d'UI de validation des captures à confiance moyenne — E7
+- Pas de tags Karakeep automatiques via API — le subagent karakeep.create prend déjà `tags`
