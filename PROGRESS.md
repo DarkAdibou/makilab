@@ -108,31 +108,57 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 ## Dernière session
 
 **Date :** 2026-02-28
-**Accompli :** E3 complet — Interface SubAgent ✅, registre ✅, subagents comme Anthropic tools (name: "subagent__action") ✅, smoke test routing validé ✅
-**Notes techniques :**
-- Les subagents sont exposés comme tools Anthropic natifs (format `subagent__action`)
-- Claude choisit lui-même quels subagents appeler via tool_use — pas besoin d'un routeur séparé
-- `orchestrator.ts` conservé mais non utilisé (simplifié via l'approche native Anthropic)
-- SubAgentName étendu avec 'time' dans packages/shared/src/index.ts
-**Prochaine étape :** E4 — Subagents MVP (Obsidian, Gmail, Web, Karakeep)
+**Accompli :**
+- E1 ✅ Foundation (monorepo, WhatsApp Gateway, agent loop)
+- E2 ✅ Mémoire T1 SQLite (node:sqlite builtin, facts, compaction)
+- E3 ✅ Architecture subagents (types, registre, routing via Anthropic tools)
+- E4 🔄 En cours — web.ts ✅, karakeep.ts ✅, Obsidian et Gmail restent à faire
+
+**État du code :**
+- GitHub : https://github.com/DarkAdibou/makilab.git (branch: master, 4 commits)
+- Dernier commit : `feat(E4-partial): subagents Web + Karakeep (WIP)`
+- `pnpm dev:agent` fonctionne et valide le routing subagent
+
+**Ce qui reste pour finir E4 :**
+1. `packages/agent/src/subagents/obsidian.ts` — utiliser plugin "Local REST API" Obsidian (port 27123)
+2. `packages/agent/src/subagents/gmail.ts` — wrapper Gmail MCP ou API Gmail directe
+3. Enregistrer les 4 subagents dans `registry.ts` (web, karakeep, obsidian, gmail)
+4. Smoke test avec vraies clés dans `.env`
+
+**Variables .env à ajouter :**
+```
+BRAVE_SEARCH_API_KEY=...        # https://brave.com/search/api/ (gratuit 2000 req/mois)
+KARAKEEP_API_URL=http://localhost:3000
+KARAKEEP_API_KEY=...            # Karakeep → Settings → API Keys
+OBSIDIAN_VAULT_PATH=d:/SynologyDrive/#Obsidian/obsidian-perso
+```
+
+**Notes techniques clés :**
+- `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
+- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `web__search`)
+- `--no-warnings` dans scripts Node pour ExperimentalWarning SQLite
+- DB `makilab.db` au root du monorepo
 
 ---
 
-## Handoff prompt
+## Handoff prompt (copier-coller pour nouvelle session)
 
 ```
-Je travaille sur Makilab Agent.
+Je travaille sur Makilab Agent — mon système nerveux central personnel.
 
-Contexte : système nerveux central personnel self-hosté NUC N150/CasaOS.
-Architecture : orchestrateur TypeScript + subagents composables + mémoire 3 tiers.
-Canaux : WhatsApp (Baileys), Mission Control (Next.js 15, Tailscale), Gmail entrant, Raycast webhook.
-Stack : Node.js 24, TypeScript strict, pnpm workspaces, SDK Anthropic, OpenRouter, MCP servers, node:sqlite+Qdrant+PostgreSQL+MinIO.
-Principes : Local First, Source=Destination, Smart Capture, CRON uniquement (pas de polling).
+Repo GitHub : https://github.com/DarkAdibou/makilab.git
+Répertoire local : d:/SynologyDrive/IA et agents/makilab
+
+Contexte : self-hosté NUC N150/CasaOS, canaux WhatsApp+Mission Control+Gmail+Raycast.
+Stack : Node.js 24, TypeScript strict, pnpm workspaces, SDK Anthropic, node:sqlite, subagents comme Anthropic tools.
+Principes : Local First, Source=Destination, Smart Capture, CRON uniquement.
 
 Fichiers clés :
-- CLAUDE.md — contexte permanent complet
-- PROGRESS.md — état des epics (source de vérité)
-- docs/plans/2026-02-28-makilab-agent-design.md — design v3 complet
+- CLAUDE.md — contexte et règles permanentes
+- PROGRESS.md — état exact (source de vérité)
+- packages/agent/src/subagents/ — architecture subagents
+- packages/agent/src/memory/ — SQLite T1
 
-On reprend à : E3 — Architecture subagents (registre, routing, composition)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 🔄
+On reprend à : E4 — finir Obsidian + Gmail subagents, les enregistrer dans registry.ts, smoke test
 ```
