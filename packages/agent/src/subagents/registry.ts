@@ -24,6 +24,7 @@ import { karakeepSubAgent } from './karakeep.ts';
 import { obsidianSubAgent } from './obsidian.ts';
 import { gmailSubAgent } from './gmail.ts';
 import { captureSubAgent } from './capture.ts';
+import { tasksSubAgent } from './tasks.ts';
 
 /** All registered subagents — add new ones here */
 const SUBAGENTS: SubAgent[] = [
@@ -33,6 +34,7 @@ const SUBAGENTS: SubAgent[] = [
   obsidianSubAgent,
   gmailSubAgent,
   captureSubAgent,
+  tasksSubAgent,
 ];
 
 /** Get a subagent by name — returns undefined if not registered */
