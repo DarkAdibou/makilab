@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E5 terminé — Smart Capture ✅ — Prochaine étape : E6 Tâches + CRON
+## Statut global : 🟢 E4.5 terminé — Hardening ✅ — Prochaine étape : E6 Tâches + CRON
 
 ---
 
@@ -71,6 +71,16 @@ Plan détaillé : `docs/plans/2026-02-28-e1-foundation.md`
 | L4.3 | SubAgent Web (Brave Search + fetch + résumé) | ✅ |
 | L4.4 | SubAgent Karakeep (bookmark, tag, rechercher) | ✅ |
 
+## E4.5 — Hardening
+
+Plan détaillé : `docs/plans/2026-02-28-e4.5-hardening.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L4.5.1 | Pino logger singleton — JSON structuré, remplace console.log partout | ✅ |
+| L4.5.2 | validateConfig() — boot validation propre avec exit(1) si var critique manque | ✅ |
+| L4.5.3 | 17 tests Vitest — encodePath, ROUTING_MAP, JSON strip, capabilities, sanitize | ✅ |
+
 ## E5 — Smart Capture
 
 Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
@@ -116,12 +126,25 @@ Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
 - E3 ✅ Architecture subagents (types, registre, routing via Anthropic tools)
 - E4 ✅ Subagents MVP — web ✅, karakeep ✅, obsidian ✅ (dual REST+file), gmail ✅ (squelette)
 - E5 ✅ Smart Capture — classify (Haiku) + route (Obsidian + Karakeep) + fix encodePath
+- E4.5 ✅ Hardening — Pino logger + validateConfig() + 17 tests Vitest
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- Dernier commit : `fix(obsidian): encodePath — preserve '/' separators in vault paths`
-- `pnpm dev:agent` fonctionne : capture URL → `Captures/URLs/`, idée → `Captures/Ideas/`
+- Dernier commit : `test(E4.5): 14 tests Vitest — encodePath, routing, JSON strip, capabilities`
+- `pnpm dev:agent` fonctionne : logs JSON Pino, validateConfig() au boot, 6 subagents
+- `pnpm --filter @makilab/agent test` : 17 tests ✅ en 783ms
 - 6 subagents : time, web, karakeep, obsidian, gmail, **capture**
+
+**E4.5 Hardening — Détails techniques :**
+- `logger.ts` singleton Pino : JSON structuré stdout, `{ service: 'makilab-agent', level, time }`
+- `validateConfig(log)` : prend le logger en paramètre (évite dépendance circulaire logger↔config)
+- Pino remplace tous les `console.log/error` dans `agent-loop.ts` et `fact-extractor.ts`
+- 17 tests Vitest dans `packages/agent/src/tests/hardening.test.ts` :
+  - `encodePath` (4) — encode segments, préserve `/`
+  - `buildCapabilitiesPrompt` (2) — liste tous les subagents et leurs actions
+  - `JSON fence stripping` (4) — strip ```json``` avant parse
+  - `capture ROUTING_MAP` (4) — coverage complète de tous les CaptureType
+  - `buildObsidianPath sanitization` (3) — forbidden chars, truncation, clean title
 
 **Architecture subagent capture (E5) :**
 - `capture.ts` — 2 actions :
@@ -139,6 +162,7 @@ Plan détaillé : `docs/plans/2026-02-28-e5-smart-capture.md`
 - DB `makilab.db` au root du monorepo
 - tsconfig : `allowImportingTsExtensions: true` + `noEmit: true` (imports .ts)
 - `encodePath(path)` = `path.split('/').map(encodeURIComponent).join('/')` — critique pour sous-dossiers
+- `validateConfig(log)` — pattern paramètre pour éviter circular dep (logger imports config)
 
 **Variables .env configurées :**
 ```
@@ -169,6 +193,6 @@ Fichiers clés :
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅
 On reprend à : E6 — Gestionnaire de tâches + CRON (PostgreSQL, SubAgent Tasks, workflows multi-étapes)
 ```
