@@ -33,4 +33,10 @@ export const config = {
 
   // Security
   webhookSecret: optional('WEBHOOK_SECRET', 'change_me_in_production'),
+
+  // Subagents — all optional, subagent gracefully disabled if key missing
+  braveSearchApiKey: optional('BRAVE_SEARCH_API_KEY', ''),
+  karakeepApiUrl: optional('KARAKEEP_API_URL', 'http://localhost:3000'),
+  karakeepApiKey: optional('KARAKEEP_API_KEY', ''),
+  obsidianVaultPath: optional('OBSIDIAN_VAULT_PATH', ''),
 } as const;
