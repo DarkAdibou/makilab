@@ -10,7 +10,21 @@
       "Bash(npm:*)",
       "Bash(pnpm --version:*)",
       "Bash(\"d:/SynologyDrive/IA et:*)",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(npx prebuild-install:*)",
+      "Bash(node -e:*)",
+      "Bash(node:*)",
+      "Read(//c/Users/adrie/AppData/Local/Programs/**)",
+      "Read(//c/Users/adrie/AppData/Roaming/npm/**)",
+      "Read(//c/Users/adrie/AppData/Roaming/npm//**)",
+      "Bash(npx obsidian:*)",
+      "Bash(cmd.exe /c \"where obsidian\")",
+      "Bash(cmd.exe /c \"obsidian help\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(pnpm --filter @makilab/agent typecheck:*)",
+      "Bash(pnpm dev:agent:*)"
     ],
     "additionalDirectories": [
       "d:\\SynologyDrive\\IA et agents\\makilab\\docs"

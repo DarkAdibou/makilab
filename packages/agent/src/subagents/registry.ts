@@ -19,14 +19,18 @@
 
 import type { SubAgent } from './types.ts';
 import { getTimeSubAgent } from './get-time.ts';
+import { webSubAgent } from './web.ts';
+import { karakeepSubAgent } from './karakeep.ts';
+import { obsidianSubAgent } from './obsidian.ts';
+import { gmailSubAgent } from './gmail.ts';
 
 /** All registered subagents — add new ones here */
 const SUBAGENTS: SubAgent[] = [
   getTimeSubAgent,
-  // obsidianSubAgent,   // E4
-  // gmailSubAgent,      // E4
-  // webSubAgent,        // E4
-  // karakeepSubAgent,   // E4
+  webSubAgent,
+  karakeepSubAgent,
+  obsidianSubAgent,
+  gmailSubAgent,
 ];
 
 /** Get a subagent by name — returns undefined if not registered */

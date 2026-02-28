@@ -22,7 +22,7 @@ for (const sa of subagents) {
 }
 console.log('');
 
-const TEST_CHANNEL = 'cli-test';
+const TEST_CHANNEL = 'cli';
 
 // Test 1: should call time__get subagent
 console.log('📨 Test 1: routing vers subagent time');

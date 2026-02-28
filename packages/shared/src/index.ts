@@ -3,7 +3,7 @@
 // ============================================================
 
 // Channels
-export type Channel = 'whatsapp' | 'mission_control' | 'antigravity' | 'gmail' | 'raycast';
+export type Channel = 'whatsapp' | 'mission_control' | 'antigravity' | 'gmail' | 'raycast' | 'cli';
 
 // Messages
 export interface IncomingMessage {
