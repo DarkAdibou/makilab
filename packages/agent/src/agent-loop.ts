@@ -37,6 +37,7 @@ import {
   saveSummary,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
+import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -123,10 +124,10 @@ Retourne uniquement le résumé, sans introduction.\n\n${transcript}`,
     if (summary) {
       saveSummary(channel, summary, lastId);
       deleteMessagesUpTo(channel, lastId);
-      console.log(`🗜️  Compaction [${channel}]: ${toCompact} messages → résumé`);
+      logger.info({ channel, compacted: toCompact }, 'History compacted');
     }
   } catch (err) {
-    console.error('⚠️  Compaction failed:', err instanceof Error ? err.message : err);
+    logger.error({ err: err instanceof Error ? err.message : String(err) }, 'Compaction failed');
   }
 }
 
@@ -209,7 +210,7 @@ export async function runAgentLoop(
             // TODO (E3): Check permissions before executing
             // if (permission === 'denied') { resultContent = 'Action refusée'; }
             // if (permission === 'confirm') { /* ask user */ }
-            console.log(`🔧 [${subagentName}/${actionName}]`);
+            logger.info({ subagent: subagentName, action: actionName }, 'Subagent call');
             const result = await subagent.execute(
               actionName ?? '',
               block.input as Record<string, unknown>,
