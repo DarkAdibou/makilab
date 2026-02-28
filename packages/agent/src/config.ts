@@ -39,5 +39,6 @@ export const config = {
   karakeepApiUrl: optional('KARAKEEP_API_URL', 'http://localhost:3000'),
   karakeepApiKey: optional('KARAKEEP_API_KEY', ''),
   obsidianVaultPath: optional('OBSIDIAN_VAULT_PATH', ''),
+  obsidianRestApiKey: optional('OBSIDIAN_REST_API_KEY', ''),
   gmailAccessToken: optional('GMAIL_ACCESS_TOKEN', ''),
 } as const;
