@@ -56,6 +56,9 @@ export const config = {
   qdrantUrl: optional('QDRANT_URL', ''),
   voyageApiKey: optional('VOYAGE_API_KEY', ''),
 
+  // SearXNG (E18) — self-hosted search, replaces Brave as primary
+  searxngUrl: optional('SEARXNG_URL', ''),
+
   // Code SubAgent (E11)
   codeRepoRoot: optional('CODE_REPO_ROOT', rootDir),
   makilabEnv: optional('MAKILAB_ENV', 'development'),

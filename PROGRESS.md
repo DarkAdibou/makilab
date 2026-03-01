@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E14 terminé — LLM Router + Cost Tracking ✅
+## Statut global : 🟢 E18 terminé — SearXNG Integration ✅
 
 ---
 
@@ -28,6 +28,7 @@
 | E14 | LLM Router intelligent + Cost Tracking (routing par tâche, métriques, dashboard coûts) | 🟠 Important | ✅ Terminé |
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
+| E18 | SearXNG — self-hosted search (remplace Brave primary) | 🟠 Important | ✅ Terminé |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
 
 ---
@@ -234,6 +235,15 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 | L14.12 | Tasks model column (deferred — no DB migration needed yet) | ⏭️ |
 | L14.13 | PROGRESS.md update + verification | ✅ |
 
+## E18 — SearXNG Integration
+
+| Story | Titre | Statut |
+|---|---|---|
+| L18.1 | Config SEARXNG_URL + docker-compose.yml | ✅ |
+| L18.2 | SearXNG search client (JSON API) | ✅ |
+| L18.3 | Fallback logic: SearXNG → Brave → error | ✅ |
+| L18.4 | Tests web subagent (9 tests) | ✅ |
+
 ---
 
 ## Dernière session
@@ -241,25 +251,22 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 **Date :** 2026-03-01
 **Accompli :**
 - E14 ✅ LLM Router + Cost Tracking (13 tâches)
+- E18 ✅ SearXNG Integration (4 stories)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (21 endpoints)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (8 pages)
-- `pnpm --filter @makilab/agent test` : 80 tests ✅
+- `pnpm --filter @makilab/agent test` : 89 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 - 0 `new Anthropic()` directes — tout passe par `createLlmClient()`
 
-**E14 — Détails techniques :**
-- `packages/agent/src/llm/` — nouveau module : pricing.ts, router.ts, client.ts
-- LLM Router : TaskType → provider+model (conversation→Sonnet, compaction/fact_extraction→Haiku, classification→OpenRouter Gemini Flash)
-- LLM Client unifié : `chat()` + `stream()`, providers Anthropic + OpenRouter
-- Cost tracking : `llm_usage` table SQLite, `logLlmUsage()` fire-and-forget après chaque appel
-- 4 fichiers migrés : agent-loop.ts, agent-loop-stream.ts, fact-extractor.ts, capture.ts
-- `AgentContext.model` optionnel pour override modèle depuis chat/CRON
-- API : GET /api/models, GET /api/costs/summary, /history, /recent
-- Dashboard /costs : stat cards, breakdowns par modèle+type, chart quotidien, table récent
-- Chat : model selector dropdown (select `<ModelInfo>` depuis /api/models)
+**E18 — Détails techniques :**
+- SearXNG self-hosted via Docker (port 8080), config `SEARXNG_URL`
+- `searchSearxng()` : JSON API `/search?format=json`, timeout 10s
+- Fallback : SearXNG → Brave → error message
+- 9 tests : SearXNG results/empty/error/count + Brave results/missing key + fallback logic (3)
+- docker-compose.yml mis à jour avec service `searxng`
 
 ---
 
@@ -283,6 +290,6 @@ Fichiers clés :
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅ E14 ✅
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅ E14 ✅ E18 ✅
 Prochaine étape à décider (E8, E15, E16, E17)
 ```

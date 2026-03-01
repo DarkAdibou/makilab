@@ -2,14 +2,11 @@
  * web.ts — SubAgent: Recherche et lecture web
  *
  * Actions:
- *   - search   : recherche via Brave Search API (résultats + snippets)
+ *   - search   : recherche via SearXNG (primary) ou Brave Search API (fallback)
  *   - fetch    : récupère et résume le contenu d'une URL
  *
- * Brave Search API : gratuit jusqu'à 2000 req/mois, clé dans BRAVE_SEARCH_API_KEY
- *
- * Extension points:
- *   - E9: indexer les résultats dans Qdrant pour mémoire sémantique
- *   - E14: utiliser un modèle économique pour la synthèse
+ * SearXNG : self-hosted, illimité, configuré via SEARXNG_URL
+ * Brave Search API : 2000 req/mois gratuit, clé dans BRAVE_SEARCH_API_KEY
  */
 
 import type { SubAgent, SubAgentResult } from './types.ts';
@@ -18,7 +15,7 @@ import { config } from '../config.ts';
 export const webSubAgent: SubAgent = {
   name: 'web',
   description:
-    'Recherche sur le web via Brave Search et récupère le contenu de pages web. ' +
+    'Recherche sur le web via SearXNG ou Brave Search et récupère le contenu de pages web. ' +
     'Utilise pour répondre à des questions factuelles récentes, trouver des informations, lire des articles.',
 
   actions: [
@@ -72,6 +69,95 @@ export const webSubAgent: SubAgent = {
 };
 
 async function searchWeb(query: string, count = 5): Promise<SubAgentResult> {
+  // SearXNG primary, Brave fallback
+  if (config.searxngUrl) {
+    try {
+      return await searchSearxng(query, count);
+    } catch {
+      // Fallback to Brave if SearXNG fails
+      if (config.braveSearchApiKey) {
+        return await searchBrave(query, count);
+      }
+      throw new Error('SearXNG indisponible et Brave Search non configuré');
+    }
+  }
+
+  if (config.braveSearchApiKey) {
+    return await searchBrave(query, count);
+  }
+
+  return {
+    success: false,
+    text: 'Aucun moteur de recherche configuré (SEARXNG_URL ou BRAVE_SEARCH_API_KEY requis)',
+    error: 'No search engine configured',
+  };
+}
+
+function truncate(text: string | undefined, max: number): string {
+  if (!text) return '(pas de description)';
+  if (text.length <= max) return text;
+  return text.slice(0, max) + '...';
+}
+
+// --- SearXNG ---
+
+interface SearxngResult {
+  title: string;
+  url: string;
+  content?: string;
+}
+
+interface SearxngResponse {
+  results: SearxngResult[];
+}
+
+export async function searchSearxng(query: string, count = 5): Promise<SubAgentResult> {
+  const url = new URL('/search', config.searxngUrl);
+  url.searchParams.set('q', query);
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('categories', 'general');
+
+  const response = await fetch(url.toString(), {
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SearXNG error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as SearxngResponse;
+  const results = (data.results ?? []).slice(0, Math.min(count, 10));
+
+  if (results.length === 0) {
+    return { success: true, text: `Aucun résultat trouvé pour: "${query}"`, data: [] };
+  }
+
+  const formatted = results.map((r, i) => {
+    const snippet = truncate(r.content, 200);
+    return `${i + 1}. **${r.title}**\n   ${r.url}\n   ${snippet}`;
+  }).join('\n\n');
+
+  return {
+    success: true,
+    text: `Résultats pour "${query}" (SearXNG):\n\n${formatted}`,
+    data: results.map((r) => ({ title: r.title, url: r.url, description: truncate(r.content, 200) })),
+  };
+}
+
+// --- Brave Search ---
+
+interface BraveSearchResponse {
+  web?: {
+    results: Array<{
+      title: string;
+      url: string;
+      description?: string;
+    }>;
+  };
+}
+
+export async function searchBrave(query: string, count = 5): Promise<SubAgentResult> {
   const apiKey = config.braveSearchApiKey;
 
   if (!apiKey) {
@@ -106,15 +192,17 @@ async function searchWeb(query: string, count = 5): Promise<SubAgentResult> {
   }
 
   const formatted = results.map((r, i) =>
-    `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description ?? '(pas de description)'}`,
+    `${i + 1}. **${r.title}**\n   ${r.url}\n   ${truncate(r.description, 200)}`,
   ).join('\n\n');
 
   return {
     success: true,
-    text: `Résultats pour "${query}":\n\n${formatted}`,
-    data: results.map((r) => ({ title: r.title, url: r.url, description: r.description })),
+    text: `Résultats pour "${query}" (Brave):\n\n${formatted}`,
+    data: results.map((r) => ({ title: r.title, url: r.url, description: truncate(r.description, 200) })),
   };
 }
+
+// --- Fetch URL ---
 
 async function fetchUrl(url: string): Promise<SubAgentResult> {
   const response = await fetch(url, {
@@ -146,16 +234,5 @@ async function fetchUrl(url: string): Promise<SubAgentResult> {
     success: true,
     text: `Contenu de ${url}:\n\n${text}`,
     data: { url, textLength: text.length },
-  };
-}
-
-// Brave Search API response types
-interface BraveSearchResponse {
-  web?: {
-    results: Array<{
-      title: string;
-      url: string;
-      description?: string;
-    }>;
   };
 }

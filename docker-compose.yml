@@ -52,8 +52,18 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
 
+  searxng:
+    image: searxng/searxng:latest
+    container_name: makilab-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - searxng_data:/etc/searxng
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   qdrant_data:
   redis_data:
   minio_data:
+  searxng_data:
