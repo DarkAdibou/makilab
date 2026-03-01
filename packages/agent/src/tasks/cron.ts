@@ -96,6 +96,18 @@ export function startCron(): void {
   // Dynamic recurring tasks from database
   syncRecurringTasks();
 
+  // ── Catalog refresh — daily at 3:00 AM ───────────────────────────────
+  cron.schedule('0 3 * * *', async () => {
+    logger.info({}, 'CRON: catalog refresh triggered');
+    try {
+      const { refreshCatalog } = await import('../llm/catalog.ts');
+      const count = await refreshCatalog();
+      logger.info({ count }, 'CRON: catalog refreshed');
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'CRON: catalog refresh failed');
+    }
+  });
+
   logger.info({}, 'CRON scheduler started');
 }
 
