@@ -83,7 +83,7 @@ function initSchema(db: DatabaseSync): void {
       id          TEXT PRIMARY KEY,
       title       TEXT NOT NULL,
       status      TEXT NOT NULL DEFAULT 'pending'
-                  CHECK(status IN ('pending','in_progress','waiting_user','done','failed')),
+                  CHECK(status IN ('backlog','pending','in_progress','waiting_user','done','failed')),
       created_by  TEXT NOT NULL CHECK(created_by IN ('user','agent','cron')),
       channel     TEXT NOT NULL,
       priority    TEXT NOT NULL DEFAULT 'medium'
@@ -116,6 +116,140 @@ function initSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id, step_order ASC);
   `);
+
+  migrateTasksAddBacklog(db);
+  repairTaskStepsFk(db);
+}
+
+/** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
+function migrateTasksAddBacklog(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name       TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const row = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'tasks_add_backlog'"
+  ).get() as { name: string } | undefined;
+
+  if (row) return; // already applied
+
+  // Check if the current schema already includes 'backlog' (fresh DB)
+  const schemaRow = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+  ).get() as { sql: string } | undefined;
+
+  if (!schemaRow || schemaRow.sql.includes('backlog')) {
+    // Fresh DB (table just created with backlog) or no tasks table — record and return
+    db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_backlog')").run();
+    return;
+  }
+
+  // Existing DB with old CHECK constraint — migrate using rename/recreate
+  db.exec('PRAGMA foreign_keys = OFF');
+  db.exec('BEGIN TRANSACTION');
+
+  try {
+    db.exec('ALTER TABLE task_steps RENAME TO task_steps_old');
+    db.exec('ALTER TABLE tasks RENAME TO tasks_old');
+
+    db.exec(`
+      CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(status IN ('backlog','pending','in_progress','waiting_user','done','failed')),
+        created_by  TEXT NOT NULL CHECK(created_by IN ('user','agent','cron')),
+        channel     TEXT NOT NULL,
+        priority    TEXT NOT NULL DEFAULT 'medium'
+                    CHECK(priority IN ('low','medium','high')),
+        context     TEXT NOT NULL DEFAULT '{}',
+        due_at      TEXT,
+        cron_id     TEXT,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_tasks_status ON tasks(status, created_at DESC);
+      CREATE INDEX idx_tasks_channel ON tasks(channel, created_at DESC);
+    `);
+
+    db.exec(`
+      CREATE TABLE task_steps (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id              TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        step_order           INTEGER NOT NULL,
+        subagent             TEXT NOT NULL,
+        action               TEXT NOT NULL,
+        input                TEXT,
+        output               TEXT,
+        status               TEXT NOT NULL DEFAULT 'pending'
+                             CHECK(status IN ('pending','in_progress','done','failed','skipped')),
+        requires_confirmation INTEGER NOT NULL DEFAULT 0,
+        model_used           TEXT,
+        cost_usd             REAL,
+        created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_task_steps_task_id ON task_steps(task_id, step_order ASC);
+    `);
+
+    db.exec('INSERT INTO tasks SELECT * FROM tasks_old');
+    db.exec('INSERT INTO task_steps SELECT * FROM task_steps_old');
+    db.exec('DROP TABLE task_steps_old');
+    db.exec('DROP TABLE tasks_old');
+    db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_backlog')").run();
+
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+/** Repair: fix task_steps FK if it references tasks_old (from a corrupted migration) */
+function repairTaskStepsFk(db: DatabaseSync): void {
+  const stepSchema = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='task_steps'"
+  ).get() as { sql: string } | undefined;
+
+  if (!stepSchema || !stepSchema.sql.includes('tasks_old')) return;
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  db.exec('BEGIN TRANSACTION');
+
+  try {
+    db.exec('ALTER TABLE task_steps RENAME TO task_steps_broken');
+    db.exec(`
+      CREATE TABLE task_steps (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id              TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        step_order           INTEGER NOT NULL,
+        subagent             TEXT NOT NULL,
+        action               TEXT NOT NULL,
+        input                TEXT,
+        output               TEXT,
+        status               TEXT NOT NULL DEFAULT 'pending'
+                             CHECK(status IN ('pending','in_progress','done','failed','skipped')),
+        requires_confirmation INTEGER NOT NULL DEFAULT 0,
+        model_used           TEXT,
+        cost_usd             REAL,
+        created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id, step_order ASC);
+    `);
+    db.exec('INSERT INTO task_steps SELECT * FROM task_steps_broken');
+    db.exec('DROP TABLE task_steps_broken');
+    db.exec('COMMIT');
+  } catch {
+    db.exec('ROLLBACK');
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
 }
 
 // ============================================================

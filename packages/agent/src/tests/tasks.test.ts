@@ -42,6 +42,14 @@ describe('Task CRUD', () => {
     expect(tasks.length).toBe(2);
   });
 
+  it('createTask with backlog status works', async () => {
+    const { createTask, updateTaskStatus, getTask } = await import('../memory/sqlite.ts');
+    const id = createTask({ title: 'Backlog item', createdBy: 'user', channel: 'test' });
+    updateTaskStatus(id, 'backlog');
+    const task = getTask(id);
+    expect(task!.status).toBe('backlog');
+  });
+
   it('listTasks filters by status', async () => {
     const { createTask, updateTaskStatus, listTasks } = await import('../memory/sqlite.ts');
     const ch = `filter-${Date.now()}`;

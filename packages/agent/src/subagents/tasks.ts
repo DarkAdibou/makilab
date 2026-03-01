@@ -74,7 +74,7 @@ export const tasksSubAgent: SubAgent = {
         type: 'object',
         properties: {
           id:     { type: 'string', description: 'UUID de la tâche' },
-          status: { type: 'string', description: 'Nouveau statut', enum: ['pending', 'in_progress', 'waiting_user', 'done', 'failed'] },
+          status: { type: 'string', description: 'Nouveau statut', enum: ['backlog', 'pending', 'in_progress', 'waiting_user', 'done', 'failed'] },
         },
         required: ['id', 'status'],
       },
