@@ -30,12 +30,14 @@ function Column({
   color,
   tasks,
   onAdd,
+  onTaskClick,
 }: {
   id: string;
   label: string;
   color: string;
   tasks: TaskInfo[];
   onAdd?: () => void;
+  onTaskClick?: (task: TaskInfo) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id });
 
@@ -51,7 +53,7 @@ function Column({
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="kanban-column-body">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} onClick={() => onTaskClick?.(task)} />
           ))}
         </div>
       </SortableContext>
@@ -68,9 +70,10 @@ interface Props {
   tasks: TaskInfo[];
   onTasksChange: (tasks: TaskInfo[]) => void;
   onRequestAdd: () => void;
+  onTaskClick?: (task: TaskInfo) => void;
 }
 
-export function KanbanBoard({ tasks, onTasksChange, onRequestAdd }: Props) {
+export function KanbanBoard({ tasks, onTasksChange, onRequestAdd, onTaskClick }: Props) {
   const [activeTask, setActiveTask] = useState<TaskInfo | null>(null);
 
   const sensors = useSensors(
@@ -155,6 +158,7 @@ export function KanbanBoard({ tasks, onTasksChange, onRequestAdd }: Props) {
             color={col.color}
             tasks={groups[col.id]}
             onAdd={col.id === 'backlog' ? onRequestAdd : undefined}
+            onTaskClick={onTaskClick}
           />
         ))}
       </div>

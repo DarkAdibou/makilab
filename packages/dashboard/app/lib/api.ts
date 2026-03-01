@@ -54,10 +54,13 @@ export async function* sendMessageStream(
 export interface TaskInfo {
   id: string;
   title: string;
+  description: string;
   status: string;
   priority: string;
+  tags: string; // JSON array string
   created_by: string;
   channel: string;
+  due_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,22 +71,64 @@ export async function fetchTasks(limit = 100): Promise<TaskInfo[]> {
   return res.json();
 }
 
-export async function createTaskApi(title: string, priority = 'medium', status = 'pending'): Promise<TaskInfo> {
+export async function createTaskApi(
+  title: string,
+  priority = 'medium',
+  status = 'pending',
+  description = '',
+  tags: string[] = [],
+  due_at?: string,
+): Promise<TaskInfo> {
   const res = await fetch(`${API_BASE}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, priority, status }),
+    body: JSON.stringify({ title, priority, status, description, tags, due_at }),
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
 
-export async function updateTaskApi(id: string, fields: { status?: string; title?: string; priority?: string }): Promise<TaskInfo> {
+export async function updateTaskApi(
+  id: string,
+  fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null },
+): Promise<TaskInfo> {
   const res = await fetch(`${API_BASE}/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
   });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteTaskApi(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tasks/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
+export async function fetchTags(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/tasks/tags`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export interface AgentEvent {
+  id: number;
+  type: string;
+  channel: string;
+  subagent: string | null;
+  action: string | null;
+  input: string | null;
+  output: string | null;
+  success: number | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export async function fetchActivity(limit = 100, type?: string): Promise<AgentEvent[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (type) params.set('type', type);
+  const res = await fetch(`${API_BASE}/activity?${params}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
