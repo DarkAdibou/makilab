@@ -1,0 +1,22 @@
+{
+  "$schema": "./docs/mcp-servers-schema.json",
+  "_comment": "MCP servers for Makilab. Each key is a server name, value is spawn config.",
+  "notebooklm": {
+    "command": "npx",
+    "args": ["-y", "notebooklm-mcp"],
+    "env": {},
+    "enabled": false
+  },
+  "indeed": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/indeed-mcp"],
+    "env": {},
+    "enabled": false
+  },
+  "google-calendar": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/google-calendar-mcp"],
+    "env": {},
+    "enabled": false
+  }
+}
