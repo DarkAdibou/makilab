@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listRecurringTasks } from './memory/sqlite.ts';
+import { syncRecurringTasks } from './tasks/cron.ts';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 
@@ -38,9 +39,14 @@ export async function buildServer() {
     },
   );
 
-  // GET /api/tasks/tags — must be before /api/tasks to avoid :id match
+  // GET /api/tasks/tags — must be before /api/tasks/:id to avoid :id match
   app.get('/api/tasks/tags', async () => {
     return getUniqueTags();
+  });
+
+  // GET /api/tasks/recurring — list recurring tasks
+  app.get('/api/tasks/recurring', async () => {
+    return listRecurringTasks();
   });
 
   // GET /api/tasks
@@ -69,10 +75,10 @@ export async function buildServer() {
   );
 
   // POST /api/tasks — create a task from the dashboard
-  app.post<{ Body: { title: string; priority?: string; status?: string; description?: string; tags?: string[]; due_at?: string } }>(
+  app.post<{ Body: { title: string; priority?: string; status?: string; description?: string; tags?: string[]; due_at?: string; cron_expression?: string; cron_prompt?: string } }>(
     '/api/tasks',
     async (req, reply) => {
-      const { title, priority, status, description, tags, due_at } = req.body;
+      const { title, priority, status, description, tags, due_at, cron_expression, cron_prompt } = req.body;
       const id = createTask({
         title,
         createdBy: 'user',
@@ -81,22 +87,29 @@ export async function buildServer() {
         description,
         tags,
         dueAt: due_at,
+        cronExpression: cron_expression,
+        cronEnabled: !!cron_expression,
+        cronPrompt: cron_prompt,
       });
       if (status && status !== 'pending') {
         updateTask(id, { status });
       }
+      if (cron_expression) syncRecurringTasks();
       const task = getTask(id);
       return reply.status(201).send(task);
     },
   );
 
   // PATCH /api/tasks/:id — update task fields
-  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null } }>(
+  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null } }>(
     '/api/tasks/:id',
     async (req, reply) => {
       const existing = getTask(req.params.id);
       if (!existing) return reply.status(404).send({ error: 'Task not found' });
       const task = updateTask(req.params.id, req.body);
+      if (req.body.cron_expression !== undefined || req.body.cron_enabled !== undefined) {
+        syncRecurringTasks();
+      }
       return task;
     },
   );
