@@ -47,6 +47,10 @@ export const config = {
   obsidianVaultPath: optional('OBSIDIAN_VAULT_PATH', ''),
   obsidianRestApiKey: optional('OBSIDIAN_REST_API_KEY', ''),
   gmailAccessToken: optional('GMAIL_ACCESS_TOKEN', ''),
+
+  // Home Assistant
+  haUrl: optional('HA_URL', ''),
+  haAccessToken: optional('HA_ACCESS_TOKEN', ''),
 } as const;
 
 /**
@@ -71,6 +75,7 @@ export function validateConfig(log: { fatal: (obj: object, msg: string) => void;
   if (!process.env['OBSIDIAN_REST_API_KEY']) optionalWarnings.push('OBSIDIAN_REST_API_KEY (obsidian REST disabled)');
   if (!process.env['BRAVE_SEARCH_API_KEY']) optionalWarnings.push('BRAVE_SEARCH_API_KEY (web search disabled)');
   if (!process.env['KARAKEEP_API_KEY']) optionalWarnings.push('KARAKEEP_API_KEY (karakeep disabled)');
+  if (!process.env['HA_URL']) optionalWarnings.push('HA_URL (home assistant disabled)');
 
   for (const w of optionalWarnings) {
     log.warn({ missing: w }, 'Optional env var not set');

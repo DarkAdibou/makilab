@@ -18,6 +18,7 @@
  */
 
 import type { SubAgent } from './types.ts';
+import { config } from '../config.ts';
 import { getTimeSubAgent } from './get-time.ts';
 import { webSubAgent } from './web.ts';
 import { karakeepSubAgent } from './karakeep.ts';
@@ -25,6 +26,7 @@ import { obsidianSubAgent } from './obsidian.ts';
 import { gmailSubAgent } from './gmail.ts';
 import { captureSubAgent } from './capture.ts';
 import { tasksSubAgent } from './tasks.ts';
+import { homeassistantSubAgent } from './homeassistant.ts';
 
 /** All registered subagents — add new ones here */
 const SUBAGENTS: SubAgent[] = [
@@ -35,6 +37,7 @@ const SUBAGENTS: SubAgent[] = [
   gmailSubAgent,
   captureSubAgent,
   tasksSubAgent,
+  ...(config.haUrl ? [homeassistantSubAgent] : []),
 ];
 
 /** Get a subagent by name — returns undefined if not registered */
