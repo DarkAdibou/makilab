@@ -15,12 +15,16 @@
  */
 
 import cron from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
 import { config } from '../config.ts';
 import { logger } from '../logger.ts';
 import { runAgentLoop } from '../agent-loop.ts';
-import { createTask } from '../memory/sqlite.ts';
+import { createTask, listRecurringTasks } from '../memory/sqlite.ts';
 import { runWorkflow } from './runner.ts';
 import type { WorkflowStep } from './runner.ts';
+import type { Channel } from '@makilab/shared';
+
+const dynamicJobs = new Map<string, ScheduledTask>();
 
 /** Start all CRON jobs. Call once at boot if CRON_ENABLED=true */
 export function startCron(): void {
@@ -89,5 +93,43 @@ export function startCron(): void {
     }
   });
 
+  // Dynamic recurring tasks from database
+  syncRecurringTasks();
+
   logger.info({}, 'CRON scheduler started');
+}
+
+/** Load recurring tasks from DB and schedule them */
+export function syncRecurringTasks(): void {
+  for (const [id, job] of dynamicJobs) {
+    job.stop();
+    dynamicJobs.delete(id);
+  }
+
+  const tasks = listRecurringTasks();
+  for (const task of tasks) {
+    if (!task.cron_expression || !task.cron_prompt) continue;
+
+    try {
+      const job = cron.schedule(task.cron_expression, async () => {
+        logger.info({ taskId: task.id, title: task.title }, 'Running recurring task');
+        try {
+          await runAgentLoop(task.cron_prompt!, {
+            channel: (task.channel as Channel) ?? 'cli',
+            from: 'cron',
+            history: [],
+          });
+        } catch (err) {
+          logger.error({ taskId: task.id, err: err instanceof Error ? err.message : String(err) }, 'Recurring task failed');
+        }
+      });
+
+      dynamicJobs.set(task.id, job);
+      logger.info({ taskId: task.id, cron: task.cron_expression, title: task.title }, 'Scheduled recurring task');
+    } catch (err) {
+      logger.warn({ taskId: task.id, cron: task.cron_expression, err: err instanceof Error ? err.message : String(err) }, 'Invalid cron expression — skipping');
+    }
+  }
+
+  logger.info({ count: dynamicJobs.size }, 'Dynamic CRON jobs synced');
 }
