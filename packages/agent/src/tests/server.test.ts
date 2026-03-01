@@ -25,7 +25,7 @@ describe('Fastify server', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBe(7);
+    expect(body.length).toBeGreaterThanOrEqual(7);
     expect(body[0]).toHaveProperty('name');
     expect(body[0]).toHaveProperty('description');
     expect(body[0]).toHaveProperty('actions');

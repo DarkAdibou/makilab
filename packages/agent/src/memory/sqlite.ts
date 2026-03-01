@@ -91,6 +91,8 @@ function initSchema(db: DatabaseSync): void {
       context     TEXT NOT NULL DEFAULT '{}',
       due_at      TEXT,
       cron_id     TEXT,
+      description TEXT NOT NULL DEFAULT '',
+      tags        TEXT NOT NULL DEFAULT '[]',
       created_at  TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -115,10 +117,27 @@ function initSchema(db: DatabaseSync): void {
       updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps(task_id, step_order ASC);
+
+    -- Journal d'activité de l'agent (tool calls, messages, errors)
+    CREATE TABLE IF NOT EXISTS agent_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      type        TEXT NOT NULL CHECK(type IN ('tool_call','tool_result','message','error')),
+      channel     TEXT NOT NULL,
+      subagent    TEXT,
+      action      TEXT,
+      input       TEXT,
+      output      TEXT,
+      success     INTEGER,
+      duration_ms INTEGER,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_events_created ON agent_events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_events_type ON agent_events(type, created_at DESC);
   `);
 
   migrateTasksAddBacklog(db);
   repairTaskStepsFk(db);
+  migrateTasksAddDescriptionTags(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -252,6 +271,33 @@ function repairTaskStepsFk(db: DatabaseSync): void {
   }
 }
 
+/** Migration: add description + tags columns to tasks for existing DBs */
+function migrateTasksAddDescriptionTags(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name       TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'tasks_add_description_tags'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+  ).get() as { sql: string } | undefined);
+
+  if (schema?.sql.includes('description')) {
+    db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_description_tags')").run();
+    return;
+  }
+
+  db.exec("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+  db.exec("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+  db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_description_tags')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -380,6 +426,8 @@ export interface TaskRow {
   context: string;
   due_at: string | null;
   cron_id: string | null;
+  description: string;
+  tags: string; // JSON array string
   created_at: string;
   updated_at: string;
 }
@@ -519,6 +567,62 @@ export function getTaskSteps(taskId: string): TaskStepRow[] {
   return getDb().prepare(`
     SELECT * FROM task_steps WHERE task_id = ? ORDER BY step_order ASC
   `).all(taskId) as unknown as TaskStepRow[];
+}
+
+// ============================================================
+// Agent Events (activity log)
+// ============================================================
+
+export interface AgentEventRow {
+  id: number;
+  type: string;
+  channel: string;
+  subagent: string | null;
+  action: string | null;
+  input: string | null;
+  output: string | null;
+  success: number | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export function logAgentEvent(event: {
+  type: 'tool_call' | 'tool_result' | 'message' | 'error';
+  channel: string;
+  subagent?: string;
+  action?: string;
+  input?: unknown;
+  output?: unknown;
+  success?: boolean;
+  durationMs?: number;
+}): void {
+  getDb().prepare(`
+    INSERT INTO agent_events (type, channel, subagent, action, input, output, success, duration_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    event.type,
+    event.channel,
+    event.subagent ?? null,
+    event.action ?? null,
+    event.input ? JSON.stringify(event.input) : null,
+    event.output ? JSON.stringify(event.output) : null,
+    event.success !== undefined ? (event.success ? 1 : 0) : null,
+    event.durationMs ?? null,
+  );
+}
+
+export function listAgentEvents(filter?: {
+  type?: string;
+  channel?: string;
+  limit?: number;
+}): AgentEventRow[] {
+  let sql = 'SELECT * FROM agent_events WHERE 1=1';
+  const params: (string | number)[] = [];
+  if (filter?.type) { sql += ' AND type = ?'; params.push(filter.type); }
+  if (filter?.channel) { sql += ' AND channel = ?'; params.push(filter.channel); }
+  sql += ' ORDER BY created_at DESC LIMIT ?';
+  params.push(filter?.limit ?? 100);
+  return getDb().prepare(sql).all(...params) as unknown as AgentEventRow[];
 }
 
 // ============================================================
