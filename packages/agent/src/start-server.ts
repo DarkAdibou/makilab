@@ -4,6 +4,7 @@ import { buildServer } from './server.ts';
 import { startCron } from './tasks/cron.ts';
 import { initCollections } from './memory/qdrant.ts';
 import { initMcpBridge, shutdownMcpBridge } from './mcp/bridge.ts';
+import { initWhatsApp } from './whatsapp/gateway.ts';
 
 validateConfig(logger);
 startCron();
@@ -16,6 +17,11 @@ await initCollections().catch((err) => {
 // Initialize MCP bridge (no-op if no enabled servers in mcp-servers.json)
 await initMcpBridge().catch((err) => {
   logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'MCP bridge init failed');
+});
+
+// Initialize WhatsApp gateway (no-op if WHATSAPP_ALLOWED_NUMBER not set)
+await initWhatsApp().catch((err) => {
+  logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'WhatsApp init failed');
 });
 
 const server = await buildServer();

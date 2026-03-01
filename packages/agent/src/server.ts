@@ -8,6 +8,7 @@ import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 import { getMcpStatus } from './mcp/bridge.ts';
 import { listAvailableModels } from './llm/pricing.ts';
+import { getWhatsAppStatus, sendWhatsAppMessage } from './whatsapp/gateway.ts';
 
 export async function buildServer() {
   const app = Fastify({ logger: false });
@@ -260,6 +261,23 @@ export async function buildServer() {
       return getRecentLlmUsage(limit);
     },
   );
+
+  // GET /api/whatsapp/status
+  app.get('/api/whatsapp/status', async () => {
+    return getWhatsAppStatus();
+  });
+
+  // POST /api/whatsapp/send
+  app.post<{ Body: { text: string } }>('/api/whatsapp/send', async (req) => {
+    const { text } = req.body;
+    if (!text) return { error: 'text required' };
+    try {
+      await sendWhatsAppMessage(text);
+      return { success: true };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 
   return app;
 }

@@ -22,7 +22,7 @@ export const config = {
   openrouterApiKey: optional('OPENROUTER_API_KEY', ''),
 
   // WhatsApp
-  whatsappAllowedNumber: required('WHATSAPP_ALLOWED_NUMBER'),
+  whatsappAllowedNumber: optional('WHATSAPP_ALLOWED_NUMBER', ''),
 
   // Agent
   agentMaxIterations: parseInt(optional('AGENT_MAX_ITERATIONS', '10'), 10),
@@ -74,7 +74,6 @@ export const config = {
 export function validateConfig(log: { fatal: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void; info: (obj: object, msg: string) => void }): void {
   const missing: string[] = [];
   if (!process.env['ANTHROPIC_API_KEY']) missing.push('ANTHROPIC_API_KEY');
-  if (!process.env['WHATSAPP_ALLOWED_NUMBER']) missing.push('WHATSAPP_ALLOWED_NUMBER');
 
   if (missing.length > 0) {
     log.fatal({ missing }, 'Missing required env vars — cannot start');
@@ -82,6 +81,7 @@ export function validateConfig(log: { fatal: (obj: object, msg: string) => void;
   }
 
   const optionalWarnings: string[] = [];
+  if (!process.env['WHATSAPP_ALLOWED_NUMBER']) optionalWarnings.push('WHATSAPP_ALLOWED_NUMBER (whatsapp disabled)');
   if (!process.env['OBSIDIAN_VAULT_PATH']) optionalWarnings.push('OBSIDIAN_VAULT_PATH (obsidian fallback disabled)');
   if (!process.env['OBSIDIAN_REST_API_KEY']) optionalWarnings.push('OBSIDIAN_REST_API_KEY (obsidian REST disabled)');
   if (!process.env['BRAVE_SEARCH_API_KEY']) optionalWarnings.push('BRAVE_SEARCH_API_KEY (web search disabled)');
