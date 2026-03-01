@@ -682,6 +682,14 @@ export function countMessages(channel: string): number {
   return result.count;
 }
 
+/** Count all messages across all channels */
+export function countAllMessages(): number {
+  const result = getDb().prepare(
+    'SELECT COUNT(*) as count FROM messages'
+  ).get() as { count: number };
+  return result.count;
+}
+
 /** Delete old messages for a channel up to a given ID */
 export function deleteMessagesUpTo(channel: string, upToId: number): void {
   getDb().prepare(

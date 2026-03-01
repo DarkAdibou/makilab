@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages } from './memory/sqlite.ts';
+import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
 import { runAgentLoop } from './agent-loop.ts';
@@ -379,6 +380,101 @@ export async function buildServer() {
       return { success: true };
     },
   );
+
+  // ============================================================
+  // Memory API endpoints
+  // ============================================================
+
+  // GET /api/memory/facts — list all core_memory facts
+  app.get('/api/memory/facts', async () => {
+    const facts = getCoreMemory();
+    return Object.entries(facts).map(([key, value]) => ({ key, value }));
+  });
+
+  // POST /api/memory/facts — add or update a fact
+  app.post<{ Body: { key: string; value: string } }>('/api/memory/facts', async (req) => {
+    setFact(req.body.key, req.body.value);
+    return { success: true };
+  });
+
+  // DELETE /api/memory/facts/:key — delete a fact
+  app.delete<{ Params: { key: string } }>('/api/memory/facts/:key', async (req) => {
+    deleteFact(req.params.key);
+    return { success: true };
+  });
+
+  // GET /api/memory/search?q=...&mode=semantic|text&limit=20
+  app.get<{ Querystring: { q: string; mode?: string; limit?: string } }>(
+    '/api/memory/search',
+    async (req) => {
+      const query = req.query.q;
+      const mode = req.query.mode ?? 'text';
+      const limit = parseInt(req.query.limit ?? '20', 10);
+
+      if (mode === 'semantic') {
+        const { embedText } = await import('./memory/embeddings.ts');
+        const { semanticSearch } = await import('./memory/qdrant.ts');
+        const vector = await embedText(query);
+        if (!vector) return [];
+        const results = await semanticSearch(vector, limit);
+        return results.map(r => ({
+          content: (r.payload.content ?? r.payload.user_message ?? '') as string,
+          channel: (r.payload.channel ?? 'unknown') as string,
+          score: r.score,
+          created_at: (r.payload.timestamp ?? '') as string,
+          type: (r.payload.type ?? 'conversation') as string,
+        }));
+      } else {
+        const results = searchMessagesFullText(query, limit);
+        return results.map(m => ({
+          content: m.content,
+          channel: m.channel,
+          score: null,
+          created_at: m.created_at,
+          type: 'message',
+        }));
+      }
+    },
+  );
+
+  // GET /api/memory/settings — current memory settings
+  app.get('/api/memory/settings', async () => {
+    return getMemorySettings();
+  });
+
+  // PATCH /api/memory/settings — update memory settings (partial)
+  app.patch<{ Body: Record<string, unknown> }>('/api/memory/settings', async (req) => {
+    updateMemorySettings(req.body as Partial<MemorySettings>);
+    return getMemorySettings();
+  });
+
+  // GET /api/memory/stats — memory system statistics
+  app.get('/api/memory/stats', async () => {
+    const facts = getCoreMemory();
+    const factsCount = Object.keys(facts).length;
+    const messagesCount = countAllMessages();
+
+    let vectorsCount = 0;
+    try {
+      const { getClient } = await import('./memory/qdrant.ts') as { getClient?: () => unknown };
+      if (typeof getClient === 'function') {
+        const client = getClient();
+        if (client && typeof (client as Record<string, unknown>).getCollection === 'function') {
+          const convInfo = await (client as { getCollection: (name: string) => Promise<{ points_count: number }> }).getCollection('conversations');
+          const knowInfo = await (client as { getCollection: (name: string) => Promise<{ points_count: number }> }).getCollection('knowledge');
+          vectorsCount = (convInfo.points_count ?? 0) + (knowInfo.points_count ?? 0);
+        }
+      }
+    } catch { /* Qdrant not available */ }
+
+    return { factsCount, messagesCount, vectorsCount };
+  });
+
+  // GET /api/memory/retrievals?limit=20 — recent auto-retrieval events
+  app.get<{ Querystring: { limit?: string } }>('/api/memory/retrievals', async (req) => {
+    const limit = parseInt(req.query.limit ?? '20', 10);
+    return getMemoryRetrievals(limit);
+  });
 
   return app;
 }
