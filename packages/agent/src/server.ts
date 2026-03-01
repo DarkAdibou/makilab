@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
 import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
-import { parseExpression } from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 import { getMcpStatus } from './mcp/bridge.ts';
@@ -60,8 +60,8 @@ export async function buildServer() {
       let nextRun: string | null = null;
       if (t.cron_expression && t.cron_enabled) {
         try {
-          const interval = parseExpression(t.cron_expression);
-          nextRun = interval.next().toISOString();
+          const expr = CronExpressionParser.parse(t.cron_expression);
+          nextRun = expr.next().toISOString();
         } catch { /* invalid cron */ }
       }
       return {
