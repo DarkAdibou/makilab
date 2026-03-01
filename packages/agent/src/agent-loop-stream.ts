@@ -21,10 +21,11 @@ import {
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
 import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
+import { createLlmClient } from './llm/client.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const llm = createLlmClient();
 
 const SUBAGENT_SEP = '__';
 
@@ -121,15 +122,16 @@ export async function* runAgentLoopStreaming(
     while (iterations < config.agentMaxIterations) {
       iterations++;
 
-      const stream = client.messages.stream({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+      const streamResult = await llm.stream({
+        taskType: 'conversation',
+        messages,
         system: systemPrompt,
         tools: anthropicTools,
-        messages,
+        model: context.model,
+        channel,
       });
 
-      for await (const event of stream) {
+      for await (const event of streamResult.stream) {
         if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {
             fullText += event.delta.text;
@@ -138,7 +140,7 @@ export async function* runAgentLoopStreaming(
         }
       }
 
-      const finalMessage = await stream.finalMessage();
+      const { message: finalMessage } = await streamResult.finalMessage();
 
       if (finalMessage.stop_reason === 'end_turn') {
         break;

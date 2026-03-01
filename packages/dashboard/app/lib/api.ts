@@ -220,3 +220,99 @@ export async function executeTaskNow(taskId: string): Promise<{ success: boolean
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+// ── LLM Cost Tracking ───────────────────────────────────────────────────
+
+export interface CostSummary {
+  totalCost: number;
+  totalCalls: number;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  byModel: Array<{ model: string; cost: number; calls: number }>;
+  byTaskType: Array<{ taskType: string; cost: number; calls: number }>;
+}
+
+export interface CostHistoryPoint {
+  date: string;
+  cost: number;
+  calls: number;
+}
+
+export interface LlmUsageEntry {
+  id: number;
+  provider: string;
+  model: string;
+  task_type: string;
+  channel: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  duration_ms: number | null;
+  task_id: string | null;
+  created_at: string;
+}
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+  provider: string;
+}
+
+export async function fetchCostSummary(period: 'day' | 'week' | 'month' | 'year' = 'month'): Promise<CostSummary> {
+  const res = await fetch(`${API_BASE}/costs/summary?period=${period}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchCostHistory(days = 30): Promise<CostHistoryPoint[]> {
+  const res = await fetch(`${API_BASE}/costs/history?days=${days}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRecentUsage(limit = 50): Promise<LlmUsageEntry[]> {
+  const res = await fetch(`${API_BASE}/costs/recent?limit=${limit}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchModels(): Promise<ModelInfo[]> {
+  const res = await fetch(`${API_BASE}/models`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function* sendMessageStreamWithModel(
+  message: string,
+  channel = 'mission_control',
+  model?: string,
+): AsyncGenerator<{ type: string; content?: string; name?: string; fullText?: string; message?: string; success?: boolean }> {
+  const res = await fetch(`${API_BASE}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, channel, model }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.body) throw new Error('No response body');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          yield JSON.parse(line.slice(6));
+        } catch { /* skip malformed */ }
+      }
+    }
+  }
+}

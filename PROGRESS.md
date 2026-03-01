@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E13.5 terminé — Dashboard Todo / Tâches récurrentes ✅
+## Statut global : 🟢 E14 terminé — LLM Router + Cost Tracking ✅
 
 ---
 
@@ -25,7 +25,7 @@
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Fusionné dans E6+E13 |
 | E13 | MCP Bridge + Tâches récurrentes | 🟠 Important | ✅ Terminé |
 | E13.5 | Dashboard : séparation Todo / Tâches récurrentes + exécution tracking | 🟠 Important | ✅ Terminé |
-| E14 | LLM Router intelligent + Cost Tracking (routing par tâche, métriques, dashboard coûts) | 🟠 Important | 🔲 Non démarré |
+| E14 | LLM Router intelligent + Cost Tracking (routing par tâche, métriques, dashboard coûts) | 🟠 Important | ✅ Terminé |
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
@@ -213,35 +213,53 @@ Design : `docs/plans/2026-03-01-e13.5-todo-recurring-tasks-design.md`
 | L13.5.5 | Panneau détail récurrent (config éditable, timeline, stats) | ✅ |
 | L13.5.6 | Bouton "Exécuter maintenant" + feedback | ✅ |
 
+## E14 — LLM Router intelligent + Cost Tracking
+
+Design : `docs/plans/2026-03-01-e14-llm-router-cost-tracking-design.md`
+Plan : `docs/plans/2026-03-01-e14-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L14.1 | Pricing table + cost calculation utility | ✅ |
+| L14.2 | llm_usage SQLite table + tracking functions | ✅ |
+| L14.3 | LLM Router — config-based model routing | ✅ |
+| L14.4 | LLM Client — unified interface + Anthropic + OpenRouter | ✅ |
+| L14.5 | Migrate agent-loop.ts to LLM Client | ✅ |
+| L14.6 | Migrate agent-loop-stream.ts to LLM Client | ✅ |
+| L14.7 | Migrate background calls (fact-extractor, capture) | ✅ |
+| L14.8 | Model param propagation (AgentContext + CRON) | ✅ |
+| L14.9 | Cost API endpoints + model param on chat | ✅ |
+| L14.10 | Dashboard Costs page (stats, history, breakdowns) | ✅ |
+| L14.11 | Chat model selector dropdown | ✅ |
+| L14.12 | Tasks model column (deferred — no DB migration needed yet) | ⏭️ |
+| L14.13 | PROGRESS.md update + verification | ✅ |
+
 ---
 
 ## Dernière session
 
 **Date :** 2026-03-01
 **Accompli :**
-- E13 ✅ MCP Bridge + Tâches récurrentes (11 tâches)
-- E13.5 ✅ Dashboard Todo / Tâches récurrentes (6 stories + fixes)
+- E14 ✅ LLM Router + Cost Tracking (13 tâches)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (17 endpoints)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (7 pages)
-- `pnpm --filter @makilab/agent test` : 65 tests ✅
+- `pnpm dev:api` : API Fastify port 3100 (21 endpoints)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (8 pages)
+- `pnpm --filter @makilab/agent test` : 80 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
-- MCP Bridge : `@modelcontextprotocol/sdk`, config-driven via `mcp-servers.json`
-- Dashboard : /todo (Kanban) + /tasks (tableau récurrentes avec toggle, stats, exécutions)
+- 0 `new Anthropic()` directes — tout passe par `createLlmClient()`
 
-**E13.5 — Détails techniques :**
-- Sidebar : OVERVIEW (Command Center, Activité) + MANAGE (Chat, Todo, Tâches, Connections)
-- /todo : Kanban existant, filtre `cron_enabled` tasks
-- /tasks : table récurrentes (fréquence, statut, next/last run, coût/mois, toggle switch)
-- Panneau détail : stats grid (4 métriques), config éditable (cron, prompt), timeline exécutions
-- Bouton "Exécuter maintenant" avec spinner feedback
-- `task_executions` table SQLite (duration, tokens, cost, result_summary, error)
-- API : GET /api/tasks/recurring (enrichi stats+nextRun), GET /api/tasks/:id/executions, POST /api/tasks/:id/execute
-- `cron-parser` v5 : `CronExpressionParser.parse()` (pas `parseExpression`)
-- Toggle switch CSS (`.toggle-switch` + `.toggle-slider`)
-- MCP status : GET /api/mcp/status, crash handling (transport.onclose/onerror)
+**E14 — Détails techniques :**
+- `packages/agent/src/llm/` — nouveau module : pricing.ts, router.ts, client.ts
+- LLM Router : TaskType → provider+model (conversation→Sonnet, compaction/fact_extraction→Haiku, classification→OpenRouter Gemini Flash)
+- LLM Client unifié : `chat()` + `stream()`, providers Anthropic + OpenRouter
+- Cost tracking : `llm_usage` table SQLite, `logLlmUsage()` fire-and-forget après chaque appel
+- 4 fichiers migrés : agent-loop.ts, agent-loop-stream.ts, fact-extractor.ts, capture.ts
+- `AgentContext.model` optionnel pour override modèle depuis chat/CRON
+- API : GET /api/models, GET /api/costs/summary, /history, /recent
+- Dashboard /costs : stat cards, breakdowns par modèle+type, chart quotidien, table récent
+- Chat : model selector dropdown (select `<ModelInfo>` depuis /api/models)
 
 ---
 
@@ -260,10 +278,11 @@ Principes : Local First, Source=Destination, Smart Capture, CRON uniquement.
 Fichiers clés :
 - CLAUDE.md — contexte et règles permanentes
 - PROGRESS.md — état exact (source de vérité)
+- packages/agent/src/llm/ — LLM Router + Client unifié
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅
-Prochaine étape à décider (E8, E14, E15, E16, E17)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅ E14 ✅
+Prochaine étape à décider (E8, E15, E16, E17)
 ```

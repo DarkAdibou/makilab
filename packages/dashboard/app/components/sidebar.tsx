@@ -17,6 +17,7 @@ const SECTIONS = [
       { href: '/todo', label: 'Todo', icon: '\u{2705}' },
       { href: '/tasks', label: 'Taches', icon: '\u{1F504}' },
       { href: '/connections', label: 'Connections', icon: '\u{1F50C}' },
+      { href: '/costs', label: 'Costs', icon: '\u{1F4B0}' },
     ],
   },
 ];

@@ -1,12 +1,13 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 import { getMcpStatus } from './mcp/bridge.ts';
+import { listAvailableModels } from './llm/pricing.ts';
 
 export async function buildServer() {
   const app = Fastify({ logger: false });
@@ -115,15 +116,16 @@ export async function buildServer() {
   );
 
   // POST /api/chat
-  app.post<{ Body: { message: string; channel?: string } }>(
+  app.post<{ Body: { message: string; channel?: string; model?: string } }>(
     '/api/chat',
     async (req) => {
-      const { message, channel = 'mission_control' } = req.body;
+      const { message, channel = 'mission_control', model } = req.body;
       const history = getRecentMessages(channel, 20);
       const reply = await runAgentLoop(message, {
         channel: channel as 'mission_control',
         from: 'mission_control',
         history,
+        model,
       });
       return { reply };
     },
@@ -197,10 +199,10 @@ export async function buildServer() {
   );
 
   // POST /api/chat/stream — SSE streaming chat
-  app.post<{ Body: { message: string; channel?: string } }>(
+  app.post<{ Body: { message: string; channel?: string; model?: string } }>(
     '/api/chat/stream',
     async (req, reply) => {
-      const { message, channel = 'mission_control' } = req.body;
+      const { message, channel = 'mission_control', model } = req.body;
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -213,6 +215,7 @@ export async function buildServer() {
           channel: channel as 'mission_control',
           from: 'mission_control',
           history: [],
+          model,
         });
 
         for await (const event of stream) {
@@ -223,6 +226,38 @@ export async function buildServer() {
       }
 
       reply.raw.end();
+    },
+  );
+
+  // GET /api/models — available LLM models
+  app.get('/api/models', async () => {
+    return listAvailableModels();
+  });
+
+  // GET /api/costs/summary — cost summary for a period
+  app.get<{ Querystring: { period?: string } }>(
+    '/api/costs/summary',
+    async (req) => {
+      const period = (req.query.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
+      return getLlmUsageSummary(period);
+    },
+  );
+
+  // GET /api/costs/history — daily cost history
+  app.get<{ Querystring: { days?: string } }>(
+    '/api/costs/history',
+    async (req) => {
+      const days = parseInt(req.query.days ?? '30', 10);
+      return getLlmUsageHistory(days);
+    },
+  );
+
+  // GET /api/costs/recent — recent LLM usage entries
+  app.get<{ Querystring: { limit?: string } }>(
+    '/api/costs/recent',
+    async (req) => {
+      const limit = parseInt(req.query.limit ?? '50', 10);
+      return getRecentLlmUsage(limit);
     },
   );
 

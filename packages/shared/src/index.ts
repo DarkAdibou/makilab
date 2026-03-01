@@ -32,6 +32,7 @@ export interface AgentContext {
   channel: Channel;
   from: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  model?: string;
 }
 
 // Tools

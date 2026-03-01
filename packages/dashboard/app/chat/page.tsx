@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchMessages, sendMessageStream } from '../lib/api';
+import { fetchMessages, sendMessageStreamWithModel, fetchModels } from '../lib/api';
+import type { ModelInfo } from '../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -44,11 +45,14 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     fetchMessages('mission_control', 50).then(setMessages).catch(() => {});
+    fetchModels().then(setModels).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -75,7 +79,7 @@ export default function ChatPage() {
 
     try {
       let fullContent = '';
-      for await (const event of sendMessageStream(text)) {
+      for await (const event of sendMessageStreamWithModel(text, 'mission_control', selectedModel || undefined)) {
         if (event.type === 'text_delta') {
           fullContent += event.content ?? '';
           const captured = fullContent;
@@ -128,6 +132,16 @@ export default function ChatPage() {
       <div className="chat-header">
         <h1>Chat</h1>
         <span className="badge badge-muted">mission_control</span>
+        {models.length > 0 && (
+          <div className="model-selector" style={{ marginLeft: 'auto' }}>
+            <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
+              <option value="">Auto (defaut)</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <div className="chat-messages">
         {messages.map((m, i) => (

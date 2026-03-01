@@ -19,13 +19,12 @@
  *   - E9: Also embed facts into Qdrant for semantic search
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import { config } from '../config.ts';
 import { setFact, getCoreMemory } from './sqlite.ts';
 import { indexFact } from './semantic-indexer.ts';
+import { createLlmClient } from '../llm/client.ts';
 import { logger } from '../logger.ts';
 
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const llm = createLlmClient();
 
 const EXTRACTION_PROMPT = `Tu analyses un échange entre un utilisateur et son agent IA personnel.
 Extrait tous les faits durables et personnels sur l'utilisateur qui méritent d'être mémorisés.
@@ -68,10 +67,11 @@ ${existingFactsStr || '(aucun)'}
 USER: ${userMessage}
 AGENT: ${assistantReply}`;
 
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', // Cheap model for background tasks
-      max_tokens: 512,
+    const response = await llm.chat({
+      taskType: 'fact_extraction',
       messages: [{ role: 'user', content: prompt }],
+      maxTokens: 512,
+      channel,
     });
 
     const raw = response.content.find((b) => b.type === 'text')?.text ?? '{}';

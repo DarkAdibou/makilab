@@ -39,10 +39,11 @@ import {
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { indexConversation, indexSummary } from './memory/semantic-indexer.ts';
 import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
+import { createLlmClient, type TaskType } from './llm/client.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const llm = createLlmClient();
 
 const COMPACTION_THRESHOLD = 30;
 const COMPACT_KEEP_RECENT = 20;
@@ -117,9 +118,8 @@ async function compactHistory(channel: string): Promise<void> {
       .map((m) => `${m.role === 'user' ? 'USER' : 'AGENT'}: ${m.content}`)
       .join('\n');
 
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+    const response = await llm.chat({
+      taskType: 'compaction',
       messages: [
         {
           role: 'user',
@@ -128,6 +128,8 @@ Garde les informations importantes : décisions prises, faits mentionnés, tâch
 Retourne uniquement le résumé, sans introduction.\n\n${transcript}`,
         },
       ],
+      maxTokens: 1024,
+      channel,
     });
 
     const summary = response.content.find((b) => b.type === 'text')?.text ?? '';
@@ -185,21 +187,22 @@ export async function runAgentLoop(
   while (iterations < config.agentMaxIterations) {
     iterations++;
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+    const response = await llm.chat({
+      taskType: 'conversation' as TaskType,
+      messages,
       system: systemPrompt,
       tools: anthropicTools,
-      messages,
+      model: context.model,
+      channel,
     });
 
-    if (response.stop_reason === 'end_turn') {
+    if (response.stopReason === 'end_turn') {
       const textBlock = response.content.find((b) => b.type === 'text');
       finalReply = textBlock?.type === 'text' ? textBlock.text : '';
       break;
     }
 
-    if (response.stop_reason === 'tool_use') {
+    if (response.stopReason === 'tool_use') {
       messages.push({ role: 'assistant', content: response.content });
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];

@@ -13,13 +13,12 @@
  *   - < 0.5  : Stocké dans Captures/Inbox/ sans classification
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import type { CaptureClassification, CaptureType } from '@makilab/shared';
-import { config } from '../config.ts';
+import { createLlmClient } from '../llm/client.ts';
 import { findSubAgent } from './registry.ts';
 
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const llm = createLlmClient();
 
 export const captureSubAgent: SubAgent = {
   name: 'capture',
@@ -138,10 +137,10 @@ Retourne UNIQUEMENT ce JSON (pas de markdown, pas d'explication) :
 Contenu à classifier :
 ${content.substring(0, 2000)}`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 256,
+  const response = await llm.chat({
+    taskType: 'classification',
     messages: [{ role: 'user', content: prompt }],
+    maxTokens: 256,
   });
 
   const raw = response.content.find((b) => b.type === 'text')?.text ?? '{}';
