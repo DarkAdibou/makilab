@@ -142,6 +142,10 @@ function initSchema(db: DatabaseSync): void {
   migrateTaskExecutions(db);
   migrateLlmUsage(db);
   migrateTasksAddModel(db);
+  migrateLlmModels(db);
+  migrateLlmRouteConfig(db);
+  migrateNotifications(db);
+  migrateNotificationSettings(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -391,6 +395,110 @@ function migrateTasksAddModel(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_model')").run();
 }
 
+function migrateLlmModels(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_llm_models'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_models (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      provider_slug TEXT NOT NULL,
+      context_length INTEGER NOT NULL,
+      price_input_per_m REAL NOT NULL,
+      price_output_per_m REAL NOT NULL,
+      supports_tools INTEGER NOT NULL DEFAULT 0,
+      supports_reasoning INTEGER NOT NULL DEFAULT 0,
+      modality TEXT NOT NULL DEFAULT 'text->text',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_models_provider ON llm_models(provider_slug);
+  `);
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_models')").run();
+}
+
+function migrateLlmRouteConfig(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_llm_route_config'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_route_config (
+      task_type TEXT PRIMARY KEY,
+      model_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const defaults = [
+    ['conversation', 'claude-sonnet-4-6'],
+    ['compaction', 'claude-haiku-4-5-20251001'],
+    ['fact_extraction', 'claude-haiku-4-5-20251001'],
+    ['classification', 'google/gemini-2.0-flash-001'],
+    ['cron_task', 'claude-sonnet-4-6'],
+    ['orchestration', 'claude-haiku-4-5-20251001'],
+  ];
+  for (const [tt, mid] of defaults) {
+    db.prepare("INSERT OR IGNORE INTO llm_route_config (task_type, model_id) VALUES (?, ?)").run(tt, mid);
+  }
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_route_config')").run();
+}
+
+function migrateNotifications(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_notifications'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      link TEXT,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+  `);
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_notifications')").run();
+}
+
+function migrateNotificationSettings(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_notification_settings'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      channel TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      types_filter TEXT,
+      quiet_hours_start TEXT,
+      quiet_hours_end TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  const channelDefaults: [string, number, string | null, string | null, string | null][] = [
+    ['mission_control', 1, null, null, null],
+    ['whatsapp', 1, '["task_failure","system_alert"]', '22:00', '08:00'],
+    ['email', 0, null, null, null],
+  ];
+  for (const [ch, en, tf, qs, qe] of channelDefaults) {
+    db.prepare("INSERT OR IGNORE INTO notification_settings (channel, enabled, types_filter, quiet_hours_start, quiet_hours_end) VALUES (?, ?, ?, ?, ?)").run(ch, en, tf, qs, qe);
+  }
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_notification_settings')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -541,6 +649,39 @@ export interface TaskStepRow {
   requires_confirmation: number;
   model_used: string | null;
   cost_usd: number | null;
+}
+
+export interface LlmModelRow {
+  id: string;
+  name: string;
+  provider_slug: string;
+  context_length: number;
+  price_input_per_m: number;
+  price_output_per_m: number;
+  supports_tools: number;
+  supports_reasoning: number;
+  modality: string;
+  updated_at: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  type: string;
+  severity: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: number;
+  created_at: string;
+}
+
+export interface NotificationSettingRow {
+  channel: string;
+  enabled: number;
+  types_filter: string | null;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  updated_at: string;
 }
 
 /** Create a new task — returns the generated ID */
@@ -1022,4 +1163,111 @@ export function getLlmUsageHistory(days = 30): Array<{ date: string; cost: numbe
     FROM llm_usage WHERE created_at >= datetime('now', ?)
     GROUP BY DATE(created_at) ORDER BY date ASC
   `).all(`-${days} days`) as unknown as Array<{ date: string; cost: number; calls: number }>;
+}
+
+// ============================================================
+// LLM Models Catalog
+// ============================================================
+
+export function upsertLlmModel(model: LlmModelRow): void {
+  getDb().prepare(`
+    INSERT INTO llm_models (id, name, provider_slug, context_length, price_input_per_m, price_output_per_m, supports_tools, supports_reasoning, modality, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, provider_slug = excluded.provider_slug, context_length = excluded.context_length,
+      price_input_per_m = excluded.price_input_per_m, price_output_per_m = excluded.price_output_per_m,
+      supports_tools = excluded.supports_tools, supports_reasoning = excluded.supports_reasoning,
+      modality = excluded.modality, updated_at = datetime('now')
+  `).run(model.id, model.name, model.provider_slug, model.context_length, model.price_input_per_m, model.price_output_per_m, model.supports_tools, model.supports_reasoning, model.modality);
+}
+
+export function getLlmModels(filters?: { tools?: boolean; minContext?: number; provider?: string }): LlmModelRow[] {
+  let sql = 'SELECT * FROM llm_models WHERE 1=1';
+  const params: unknown[] = [];
+  if (filters?.tools) { sql += ' AND supports_tools = 1'; }
+  if (filters?.minContext) { sql += ' AND context_length >= ?'; params.push(filters.minContext); }
+  if (filters?.provider) { sql += ' AND provider_slug = ?'; params.push(filters.provider); }
+  sql += ' ORDER BY price_input_per_m ASC';
+  return getDb().prepare(sql).all(...params) as LlmModelRow[];
+}
+
+export function getLlmModel(id: string): LlmModelRow | null {
+  return (getDb().prepare('SELECT * FROM llm_models WHERE id = ?').get(id) as LlmModelRow) ?? null;
+}
+
+export function getLlmModelsCount(): number {
+  return (getDb().prepare('SELECT COUNT(*) as count FROM llm_models').get() as { count: number }).count;
+}
+
+export function getLlmModelLastUpdate(): string | null {
+  const row = getDb().prepare('SELECT MAX(updated_at) as last FROM llm_models').get() as { last: string | null };
+  return row?.last ?? null;
+}
+
+// ============================================================
+// LLM Route Config
+// ============================================================
+
+export function getRouteConfig(): Array<{ task_type: string; model_id: string }> {
+  return getDb().prepare('SELECT task_type, model_id FROM llm_route_config ORDER BY task_type').all() as Array<{ task_type: string; model_id: string }>;
+}
+
+export function getRouteForTaskType(taskType: string): string | null {
+  const row = getDb().prepare('SELECT model_id FROM llm_route_config WHERE task_type = ?').get(taskType) as { model_id: string } | undefined;
+  return row?.model_id ?? null;
+}
+
+export function setRouteForTaskType(taskType: string, modelId: string): void {
+  getDb().prepare("INSERT INTO llm_route_config (task_type, model_id, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(task_type) DO UPDATE SET model_id = excluded.model_id, updated_at = datetime('now')").run(taskType, modelId);
+}
+
+// ============================================================
+// Notifications
+// ============================================================
+
+export function createNotification(n: { type: string; severity: string; title: string; body: string; link?: string }): string {
+  const id = randomUUID();
+  getDb().prepare('INSERT INTO notifications (id, type, severity, title, body, link) VALUES (?, ?, ?, ?, ?, ?)').run(id, n.type, n.severity, n.title, n.body, n.link ?? null);
+  return id;
+}
+
+export function getNotifications(opts?: { unreadOnly?: boolean; limit?: number }): NotificationRow[] {
+  let sql = 'SELECT * FROM notifications';
+  if (opts?.unreadOnly) sql += ' WHERE read = 0';
+  sql += ' ORDER BY created_at DESC';
+  if (opts?.limit) sql += ` LIMIT ${opts.limit}`;
+  return getDb().prepare(sql).all() as NotificationRow[];
+}
+
+export function getUnreadNotificationCount(): number {
+  return (getDb().prepare('SELECT COUNT(*) as count FROM notifications WHERE read = 0').get() as { count: number }).count;
+}
+
+export function markNotificationRead(id: string): void {
+  getDb().prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id);
+}
+
+export function markAllNotificationsRead(): void {
+  getDb().prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
+}
+
+// ============================================================
+// Notification Settings
+// ============================================================
+
+export function getNotificationSettings(): NotificationSettingRow[] {
+  return getDb().prepare('SELECT * FROM notification_settings ORDER BY channel').all() as NotificationSettingRow[];
+}
+
+export function updateNotificationSettings(channel: string, fields: Partial<Omit<NotificationSettingRow, 'channel'>>): void {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (fields.enabled !== undefined) { sets.push('enabled = ?'); params.push(fields.enabled); }
+  if (fields.types_filter !== undefined) { sets.push('types_filter = ?'); params.push(fields.types_filter); }
+  if (fields.quiet_hours_start !== undefined) { sets.push('quiet_hours_start = ?'); params.push(fields.quiet_hours_start); }
+  if (fields.quiet_hours_end !== undefined) { sets.push('quiet_hours_end = ?'); params.push(fields.quiet_hours_end); }
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+  params.push(channel);
+  getDb().prepare(`UPDATE notification_settings SET ${sets.join(', ')} WHERE channel = ?`).run(...params);
 }
