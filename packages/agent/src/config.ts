@@ -55,6 +55,10 @@ export const config = {
   // Semantic Memory (E9) — optional, memory subagent disabled if missing
   qdrantUrl: optional('QDRANT_URL', ''),
   voyageApiKey: optional('VOYAGE_API_KEY', ''),
+
+  // Code SubAgent (E11)
+  codeRepoRoot: optional('CODE_REPO_ROOT', rootDir),
+  makilabEnv: optional('MAKILAB_ENV', 'development'),
 } as const;
 
 /**
