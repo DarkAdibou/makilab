@@ -673,3 +673,24 @@ body {
 .model-selector select { appearance: none; background: var(--muted); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 28px 4px 10px; font-size: 0.75rem; font-family: var(--font-mono); cursor: pointer; outline: none; }
 .model-selector select:focus { border-color: var(--ring); }
 .model-selector::after { content: '\u25BE'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.75rem; color: var(--muted-foreground); }
+
+/* ─── Memory page ─── */
+.memory-container { display: flex; flex-direction: column; gap: 24px; }
+.memory-header { display: flex; align-items: center; justify-content: space-between; }
+.memory-header h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+
+.memory-facts-list { display: flex; flex-direction: column; gap: 2px; }
+.memory-fact-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.memory-fact-row:last-child { border-bottom: none; }
+.memory-fact-key { font-size: 0.8125rem; font-weight: 600; min-width: 120px; font-family: var(--font-mono); }
+.memory-fact-value { flex: 1; font-size: 0.8125rem; color: var(--foreground); }
+
+.memory-search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.memory-search-toggle { display: flex; gap: 2px; }
+.memory-search-results { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.memory-search-result-card { padding: 14px 16px; }
+
+.memory-settings-section { display: flex; flex-direction: column; gap: 14px; }
+.memory-settings-field { display: flex; align-items: center; gap: 12px; }
+.memory-settings-field label:first-child { font-size: 0.8125rem; font-weight: 500; min-width: 130px; }
+.memory-retrievals-table { overflow-x: auto; }

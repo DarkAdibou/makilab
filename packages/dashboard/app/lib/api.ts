@@ -427,6 +427,103 @@ export async function fetchCatalogMeta(): Promise<{ count: number; lastUpdate: s
   return res.json();
 }
 
+// ── Memory ────────────────────────────────────────────────────────────
+
+export interface FactInfo {
+  key: string;
+  value: string;
+}
+
+export interface MemorySettingsInfo {
+  auto_retrieve_enabled: boolean;
+  auto_retrieve_max_results: number;
+  auto_retrieve_min_score: number;
+  obsidian_context_enabled: boolean;
+  obsidian_context_notes: string[];
+  obsidian_context_tag: string;
+}
+
+export interface MemorySearchResult {
+  content: string;
+  channel: string;
+  score: number | null;
+  created_at: string;
+  type: string;
+}
+
+export interface MemoryRetrievalInfo {
+  id: string;
+  channel: string;
+  user_message_preview: string;
+  memories_injected: number;
+  obsidian_notes_injected: number;
+  total_tokens_added: number;
+  created_at: string;
+}
+
+export interface MemoryStats {
+  factsCount: number;
+  messagesCount: number;
+  vectorsCount: number;
+}
+
+export async function fetchFacts(): Promise<FactInfo[]> {
+  const res = await fetch(`${API_BASE}/memory/facts`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function addFactApi(key: string, value: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/memory/facts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
+export async function deleteFactApi(key: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/memory/facts/${encodeURIComponent(key)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
+export async function fetchMemorySettings(): Promise<MemorySettingsInfo> {
+  const res = await fetch(`${API_BASE}/memory/settings`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function updateMemorySettingsApi(updates: Partial<MemorySettingsInfo>): Promise<MemorySettingsInfo> {
+  const res = await fetch(`${API_BASE}/memory/settings`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function searchMemory(query: string, mode: 'semantic' | 'text', limit?: number): Promise<MemorySearchResult[]> {
+  const params = new URLSearchParams({ q: query, mode });
+  if (limit) params.set('limit', String(limit));
+  const res = await fetch(`${API_BASE}/memory/search?${params}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMemoryStats(): Promise<MemoryStats> {
+  const res = await fetch(`${API_BASE}/memory/stats`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMemoryRetrievals(limit?: number): Promise<MemoryRetrievalInfo[]> {
+  const params = limit ? `?limit=${limit}` : '';
+  const res = await fetch(`${API_BASE}/memory/retrievals${params}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
 // ── Notification Settings ────────────────────────────────────────────
 
 export interface NotificationSettingInfo {

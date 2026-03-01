@@ -19,6 +19,7 @@ const SECTIONS = [
       { href: '/connections', label: 'Connections', icon: '\u{1F50C}' },
       { href: '/costs', label: 'Costs', icon: '\u{1F4B0}' },
       { href: '/models', label: 'Models', icon: '\u{1F916}' },
+      { href: '/memory', label: 'Memoire', icon: '\u{1F9E0}' },
     ],
   },
   {

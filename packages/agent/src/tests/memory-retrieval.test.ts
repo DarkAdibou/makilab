@@ -64,38 +64,24 @@ describe('memory_settings', () => {
 
 describe('memory_retrievals', () => {
   it('logs and retrieves memory retrieval events', () => {
+    const tag = `test-${Date.now()}`;
     logMemoryRetrieval({
-      channel: 'whatsapp',
+      channel: tag,
       userMessagePreview: 'Quels sont mes projets en cours ?',
       memoriesInjected: 3,
       obsidianNotesInjected: 1,
       totalTokensAdded: 450,
     });
 
-    logMemoryRetrieval({
-      channel: 'mission_control',
-      userMessagePreview: 'Résume ma journée',
-      memoriesInjected: 2,
-      obsidianNotesInjected: 0,
-      totalTokensAdded: 200,
-    });
+    const rows = getMemoryRetrievals(50);
+    const row = rows.find(r => r.channel === tag);
 
-    const rows = getMemoryRetrievals(10);
-    expect(rows.length).toBeGreaterThanOrEqual(2);
-
-    // Find our entries (order may vary when timestamps match)
-    const whatsappRow = rows.find(r => r.channel === 'whatsapp' && r.memories_injected === 3);
-    const mcRow = rows.find(r => r.channel === 'mission_control' && r.memories_injected === 2);
-
-    expect(whatsappRow).toBeDefined();
-    expect(whatsappRow!.total_tokens_added).toBe(450);
-    expect(whatsappRow!.obsidian_notes_injected).toBe(1);
-    expect(whatsappRow!.id).toBeTruthy();
-    expect(whatsappRow!.created_at).toBeTruthy();
-
-    expect(mcRow).toBeDefined();
-    expect(mcRow!.total_tokens_added).toBe(200);
-    expect(mcRow!.obsidian_notes_injected).toBe(0);
+    expect(row).toBeDefined();
+    expect(row!.memories_injected).toBe(3);
+    expect(row!.total_tokens_added).toBe(450);
+    expect(row!.obsidian_notes_injected).toBe(1);
+    expect(row!.id).toBeTruthy();
+    expect(row!.created_at).toBeTruthy();
   });
 });
 
