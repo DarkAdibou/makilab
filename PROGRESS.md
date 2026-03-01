@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E7 MVP terminé — Mission Control ✅ — Prochaine étape : E8 Gmail + Raycast
+## Statut global : 🟢 E10 terminé — Mission Control v2 ✅ — Prochaine étape : E8 Gmail + Raycast
 
 ---
 
@@ -17,10 +17,10 @@
 | E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | ✅ Terminé |
 | E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | ✅ Terminé |
-| E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | ✅ MVP Terminé |
+| E7 | Mission Control — Chat + Connections MVP | 🟠 Important | ✅ Terminé |
 | E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré |
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | 🔲 Non démarré |
-| E10 | Mission Control — Vues contextuelles dynamiques | 🟡 Moyen terme | 🔲 Non démarré |
+| E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | 🔲 Non démarré |
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Non démarré |
 | E13 | Subagents étendus (Indeed, NotebookLM, Calendar, Drive) | 🟢 Long terme | 🔲 Non démarré |
@@ -116,7 +116,21 @@ Plan : `docs/plans/2026-03-01-e7-mission-control.md`
 | L7.3 | Chat page — envoi messages + historique | ✅ |
 | L7.4 | Connections page — cards subagents + actions | ✅ |
 | L7.5 | CORS + server entrypoint + API proxy (rewrites) | ✅ |
-| — | Command Center, Tasks view, Logs, CRON UI, Settings | 🔲 E10+ |
+
+## E10 — Mission Control v2
+
+Design : `docs/plans/2026-03-01-e10-mission-control-v2-design.md`
+Plan : `docs/plans/2026-03-01-e10-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L10.1 | SQLite migration — ajout statut backlog + table _migrations | ✅ |
+| L10.2 | API endpoints — POST/PATCH tasks + GET stats | ✅ |
+| L10.3 | Kanban Tasks page — drag-and-drop @dnd-kit, 4 colonnes | ✅ |
+| L10.4 | Command Center page — stat cards + activité récente | ✅ |
+| L10.5 | Agent loop streaming — AsyncGenerator + SSE endpoint | ✅ |
+| L10.6 | Chat streaming + markdown rendering (react-markdown) | ✅ |
+| L10.7 | SubAgent Home Assistant — list, state, service, assist | ✅ |
 
 ---
 
@@ -124,23 +138,23 @@ Plan : `docs/plans/2026-03-01-e7-mission-control.md`
 
 **Date :** 2026-03-01
 **Accompli :**
-- E7 ✅ Mission Control MVP — Fastify API (5 endpoints) + Next.js 15 dashboard (chat + connections)
+- Fix Obsidian REST API (search GET→POST, headers nettoyés)
+- E10 ✅ Mission Control v2 — Kanban, streaming chat, command center, Home Assistant subagent
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (health, subagents, messages, tasks, chat)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (chat + connections)
-- `pnpm --filter @makilab/agent test` : 30 tests ✅ (17 hardening + 9 tasks + 4 server)
-- 7 subagents : time, web, karakeep, obsidian, gmail, capture, tasks
+- `pnpm dev:api` : API Fastify port 3100 (9 endpoints : health, subagents, messages, tasks, POST tasks, PATCH tasks/:id, stats, chat, chat/stream)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (5 pages : /, /chat, /tasks, /connections, /_not-found)
+- `pnpm --filter @makilab/agent test` : 35 tests ✅ (17 hardening + 10 tasks + 8 server)
+- 8 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant (conditionnel)
 
-**E7 Mission Control — Détails techniques :**
-- `packages/agent/src/server.ts` — `buildServer()` async, Fastify + @fastify/cors
-- `packages/agent/src/start-server.ts` — entrypoint API (validateConfig + startCron + listen)
-- `packages/dashboard/` — Next.js 15 App Router, vanilla CSS dark mode (Apex-inspired)
-- API proxy via Next.js rewrites (`/api/*` → `localhost:3100/api/*`)
-- Design system : CSS vars light/dark, Inter + JetBrains Mono, sidebar 240px fixe
-- Chat : POST /api/chat → runAgentLoop() → réponse complète (pas de streaming)
-- Connections : GET /api/subagents → cards avec actions listées
+**E10 Mission Control v2 — Détails techniques :**
+- Kanban : @dnd-kit/core + sortable, 4 colonnes (Backlog/Todo/In Progress/Done), drag-and-drop optimiste
+- Command Center : 4 stat cards, tâches en cours, activité récente
+- Chat streaming : SSE via POST /api/chat/stream, AsyncGenerator, react-markdown
+- Sidebar : sections OVERVIEW (Command Center, Chat) + MANAGE (Tasks, Connections)
+- Home Assistant : API REST HA directe, 4 actions (list_entities, get_state, call_service, assist)
+- Migration SQLite : table _migrations, backlog status ajouté aux tasks
 
 ---
 
@@ -163,6 +177,6 @@ Fichiers clés :
 - packages/agent/src/memory/ — SQLite T1
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 MVP ✅
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅
 On reprend à : E8 — Canal Gmail entrant + Raycast webhook
 ```
