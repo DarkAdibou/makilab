@@ -22,7 +22,7 @@
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | ✅ Terminé |
 | E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | ✅ Terminé |
-| E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Non démarré |
+| E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Fusionné dans E6+E13 |
 | E13 | Subagents étendus (Indeed, NotebookLM, Calendar, Drive) | 🟢 Long terme | 🔲 Non démarré |
 | E14 | LLM Router intelligent configurable | 🟢 Long terme | 🔲 Non démarré |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
