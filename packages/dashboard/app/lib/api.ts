@@ -61,6 +61,9 @@ export interface TaskInfo {
   created_by: string;
   channel: string;
   due_at: string | null;
+  cron_expression: string | null;
+  cron_enabled: number; // 0 or 1
+  cron_prompt: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,11 +81,13 @@ export async function createTaskApi(
   description = '',
   tags: string[] = [],
   due_at?: string,
+  cron_expression?: string,
+  cron_prompt?: string,
 ): Promise<TaskInfo> {
   const res = await fetch(`${API_BASE}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, priority, status, description, tags, due_at }),
+    body: JSON.stringify({ title, priority, status, description, tags, due_at, cron_expression, cron_prompt }),
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
@@ -90,7 +95,7 @@ export async function createTaskApi(
 
 export async function updateTaskApi(
   id: string,
-  fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null },
+  fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null },
 ): Promise<TaskInfo> {
   const res = await fetch(`${API_BASE}/tasks/${id}`, {
     method: 'PATCH',

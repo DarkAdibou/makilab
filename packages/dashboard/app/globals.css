@@ -198,6 +198,53 @@ body {
   color: var(--foreground);
 }
 
+.badge-cron {
+  background: #6366f1;
+  color: white;
+}
+
+/* ─── Recurring task card ─── */
+.kanban-card-cron {
+  margin-top: 4px;
+}
+
+/* ─── Detail panel recurring section ─── */
+.detail-cron-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--muted);
+  border-radius: var(--radius);
+}
+
+.detail-cron-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.detail-cron-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.detail-cron-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-cron-value {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, monospace);
+}
+
 /* ─── Button ─── */
 .btn {
   display: inline-flex;

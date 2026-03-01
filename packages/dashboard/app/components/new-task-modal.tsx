@@ -26,6 +26,9 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [dueAt, setDueAt] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [cronExpression, setCronExpression] = useState('');
+  const [cronPrompt, setCronPrompt] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!open) return null;
@@ -47,13 +50,20 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
     if (!trimmed || loading) return;
     setLoading(true);
     try {
-      const task = await createTaskApi(trimmed, priority, 'backlog', description, tags, dueAt || undefined);
+      const task = await createTaskApi(
+        trimmed, priority, 'backlog', description, tags, dueAt || undefined,
+        isRecurring ? cronExpression || undefined : undefined,
+        isRecurring ? cronPrompt || undefined : undefined,
+      );
       setTitle('');
       setDescription('');
       setPriority('medium');
       setTags([]);
       setTagInput('');
       setDueAt('');
+      setIsRecurring(false);
+      setCronExpression('');
+      setCronPrompt('');
       onCreated(task);
       onClose();
     } catch (err) {
@@ -134,6 +144,50 @@ export function NewTaskModal({ open, onClose, onCreated }: Props) {
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
             />
+          </div>
+          <div className="modal-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <label className="detail-cron-toggle">
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+              />
+              <span>Tache recurrente</span>
+            </label>
+            {isRecurring && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                <label htmlFor="cron-expr">Frequence CRON</label>
+                <select
+                  className="textarea"
+                  style={{ height: 'auto', padding: '8px 12px' }}
+                  value={cronExpression}
+                  onChange={(e) => setCronExpression(e.target.value)}
+                >
+                  <option value="">Choisir...</option>
+                  <option value="0 7 * * *">Tous les jours 7h</option>
+                  <option value="0 8 * * 1">Chaque lundi 8h</option>
+                  <option value="0 9 * * 1-5">Lundi-vendredi 9h</option>
+                  <option value="0 8 1 * *">1er du mois 8h</option>
+                </select>
+                <input
+                  id="cron-expr"
+                  className="textarea"
+                  style={{ height: 'auto', padding: '8px 12px' }}
+                  value={cronExpression}
+                  onChange={(e) => setCronExpression(e.target.value)}
+                  placeholder="Ou saisir: 0 8 * * 1 (lundi 8h)"
+                />
+                <label htmlFor="cron-prompt">Prompt</label>
+                <textarea
+                  id="cron-prompt"
+                  className="textarea"
+                  rows={2}
+                  value={cronPrompt}
+                  onChange={(e) => setCronPrompt(e.target.value)}
+                  placeholder="Ex: Recherche les offres d'emploi dev senior TypeScript..."
+                />
+              </div>
+            )}
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>

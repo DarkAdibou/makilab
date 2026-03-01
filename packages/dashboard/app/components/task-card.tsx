@@ -26,6 +26,17 @@ function tagColor(tag: string): string {
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]!;
 }
 
+function humanCron(expr: string): string {
+  const parts = expr.split(' ');
+  if (parts.length !== 5) return expr;
+  const [min, hour, dom, , dow] = parts;
+  const dayNames: Record<string, string> = { '0': 'dimanche', '1': 'lundi', '2': 'mardi', '3': 'mercredi', '4': 'jeudi', '5': 'vendredi', '6': 'samedi', '7': 'dimanche' };
+  if (dow !== '*' && dom === '*' && hour !== '*') return `${dayNames[dow!] ?? `jour ${dow}`} ${hour}h${min === '0' ? '' : min}`;
+  if (dow === '*' && dom === '*' && hour !== '*') return `Tous les jours ${hour}h${min === '0' ? '' : min}`;
+  if (dom !== '*' && dow === '*' && hour !== '*') return `Le ${dom} du mois ${hour}h${min === '0' ? '' : min}`;
+  return expr;
+}
+
 export function TaskCard({ task, onClick }: { task: TaskInfo; onClick?: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -68,6 +79,13 @@ export function TaskCard({ task, onClick }: { task: TaskInfo; onClick?: () => vo
           {tags.map(t => (
             <span key={t} className="tag-badge" style={{ background: tagColor(t) }}>{t}</span>
           ))}
+        </div>
+      )}
+      {task.cron_expression && (
+        <div className="kanban-card-cron">
+          <span className={`badge ${task.cron_enabled ? 'badge-cron' : 'badge-muted'}`}>
+            {task.cron_enabled ? '\u{1F504}' : '\u{23F8}\u{FE0F}'} {humanCron(task.cron_expression)}
+          </span>
         </div>
       )}
       <div className="kanban-card-meta">

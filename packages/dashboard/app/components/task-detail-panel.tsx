@@ -152,6 +152,32 @@ export function TaskDetailPanel({ task, onClose, onUpdated, onDeleted }: Props) 
             value={dueAt ? dueAt.slice(0, 10) : ''}
             onChange={e => { setDueAt(e.target.value); save({ due_at: e.target.value || null }); }}
           />
+
+          {task.cron_expression && (
+            <>
+              <label className="detail-label">Tache recurrente</label>
+              <div className="detail-cron-section">
+                <label className="detail-cron-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!task.cron_enabled}
+                    onChange={() => save({ cron_enabled: !task.cron_enabled })}
+                  />
+                  <span>{task.cron_enabled ? 'Activee' : 'Desactivee'}</span>
+                </label>
+                <div className="detail-cron-info">
+                  <span className="detail-label" style={{ marginTop: 0 }}>Frequence</span>
+                  <span className="detail-cron-value">{task.cron_expression}</span>
+                </div>
+                {task.cron_prompt && (
+                  <div className="detail-cron-info">
+                    <span className="detail-label" style={{ marginTop: 0 }}>Prompt</span>
+                    <span className="detail-cron-value">{task.cron_prompt}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="detail-panel-footer">
