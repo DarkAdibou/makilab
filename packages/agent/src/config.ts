@@ -51,6 +51,10 @@ export const config = {
   // Home Assistant
   haUrl: optional('HA_URL', ''),
   haAccessToken: optional('HA_ACCESS_TOKEN', ''),
+
+  // Semantic Memory (E9) — optional, memory subagent disabled if missing
+  qdrantUrl: optional('QDRANT_URL', ''),
+  voyageApiKey: optional('VOYAGE_API_KEY', ''),
 } as const;
 
 /**
@@ -76,6 +80,8 @@ export function validateConfig(log: { fatal: (obj: object, msg: string) => void;
   if (!process.env['BRAVE_SEARCH_API_KEY']) optionalWarnings.push('BRAVE_SEARCH_API_KEY (web search disabled)');
   if (!process.env['KARAKEEP_API_KEY']) optionalWarnings.push('KARAKEEP_API_KEY (karakeep disabled)');
   if (!process.env['HA_URL']) optionalWarnings.push('HA_URL (home assistant disabled)');
+  if (!process.env['QDRANT_URL']) optionalWarnings.push('QDRANT_URL (semantic memory disabled)');
+  if (!process.env['VOYAGE_API_KEY']) optionalWarnings.push('VOYAGE_API_KEY (semantic memory disabled)');
 
   for (const w of optionalWarnings) {
     log.warn({ missing: w }, 'Optional env var not set');

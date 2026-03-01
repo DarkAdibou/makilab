@@ -19,10 +19,12 @@
     "@anthropic-ai/sdk": "^0.36.0",
     "@fastify/cors": "^11.2.0",
     "@makilab/shared": "workspace:*",
+    "@qdrant/js-client-rest": "^1.17.0",
     "dotenv": "^16.0.0",
     "fastify": "^5.7.4",
     "node-cron": "^4.2.1",
-    "pino": "^9.14.0"
+    "pino": "^9.14.0",
+    "voyageai": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
