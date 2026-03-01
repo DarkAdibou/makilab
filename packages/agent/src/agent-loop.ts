@@ -37,6 +37,7 @@ import {
   saveSummary,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
+import { indexConversation, indexSummary } from './memory/semantic-indexer.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
@@ -123,6 +124,7 @@ Retourne uniquement le résumé, sans introduction.\n\n${transcript}`,
     const summary = response.content.find((b) => b.type === 'text')?.text ?? '';
     if (summary) {
       saveSummary(channel, summary, lastId);
+      indexSummary(channel, summary).catch(() => {});
       deleteMessagesUpTo(channel, lastId);
       logger.info({ channel, compacted: toCompact }, 'History compacted');
     }
@@ -257,6 +259,7 @@ export async function runAgentLoop(
   saveMessage(channel, 'assistant', finalReply);
 
   extractAndSaveFacts(userMessage, finalReply, channel).catch(() => {});
+  indexConversation(channel, userMessage, finalReply).catch(() => {});
 
   const msgCount = countMessages(channel);
   if (msgCount > COMPACTION_THRESHOLD) {

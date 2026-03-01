@@ -19,6 +19,7 @@ import {
   logAgentEvent,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
+import { indexConversation } from './memory/semantic-indexer.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
@@ -234,6 +235,7 @@ export async function* runAgentLoopStreaming(
   saveMessage(channel, 'assistant', fullText);
 
   extractAndSaveFacts(userMessage, fullText, channel).catch(() => {});
+  indexConversation(channel, userMessage, fullText).catch(() => {});
 
   yield { type: 'done', fullText };
 }

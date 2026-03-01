@@ -22,6 +22,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.ts';
 import { setFact, getCoreMemory } from './sqlite.ts';
+import { indexFact } from './semantic-indexer.ts';
 import { logger } from '../logger.ts';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -83,6 +84,7 @@ AGENT: ${assistantReply}`;
     for (const [key, value] of Object.entries(facts)) {
       if (typeof key === 'string' && typeof value === 'string' && key && value) {
         setFact(key, value);
+        indexFact(key, value).catch(() => {});
       }
     }
 

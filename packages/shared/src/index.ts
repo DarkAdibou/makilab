@@ -56,6 +56,7 @@ export type SubAgentName =
   | 'capture'
   | 'tasks'
   | 'homeassistant'
+  | 'memory'
   | 'code'
   | 'indeed'
   | 'notebooklm'
