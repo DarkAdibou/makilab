@@ -9,11 +9,41 @@ interface Message {
   content: string;
 }
 
+interface ToolCall {
+  name: string;
+  args?: Record<string, unknown>;
+  result?: string;
+  success?: boolean;
+  loading: boolean;
+}
+
+function ToolCallBlock({ call }: { call: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const displayName = call.name.replace('__', ' \u2192 ');
+
+  return (
+    <div className={`tool-call-block ${call.loading ? 'loading' : call.success ? 'success' : 'error'}`}>
+      <div className="tool-call-header" onClick={() => setExpanded(!expanded)}>
+        {call.loading && <span className="chat-tool-spinner" />}
+        {!call.loading && <span>{call.success ? '\u2713' : '\u2715'}</span>}
+        <span className="tool-call-name">{displayName}</span>
+        <span className="tool-call-expand">{expanded ? '\u25BC' : '\u25B6'}</span>
+      </div>
+      {expanded && (
+        <div className="tool-call-detail">
+          {call.args && <div><strong>Args:</strong><pre>{JSON.stringify(call.args, null, 2)}</pre></div>}
+          {call.result && <div><strong>Resultat:</strong><pre>{call.result}</pre></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [toolStatus, setToolStatus] = useState('');
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -23,7 +53,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, toolStatus]);
+  }, [messages, toolCalls]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -37,7 +67,7 @@ export default function ChatPage() {
     if (!text || loading) return;
     setInput('');
     setLoading(true);
-    setToolStatus('');
+    setToolCalls([]);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     setMessages(prev => [...prev, { role: 'user', content: text }]);
@@ -46,7 +76,7 @@ export default function ChatPage() {
     try {
       let fullContent = '';
       for await (const event of sendMessageStream(text)) {
-        if (event.type === 'text') {
+        if (event.type === 'text_delta') {
           fullContent += event.content ?? '';
           const captured = fullContent;
           setMessages(prev => {
@@ -55,10 +85,18 @@ export default function ChatPage() {
             return updated;
           });
         } else if (event.type === 'tool_start') {
-          const name = (event.name ?? '').replace('__', ' \u2192 ');
-          setToolStatus(`Utilisation de ${name}...`);
+          setToolCalls(prev => [...prev, {
+            name: event.name ?? '',
+            args: (event as Record<string, unknown>).args as Record<string, unknown> | undefined,
+            loading: true,
+          }]);
         } else if (event.type === 'tool_end') {
-          setToolStatus('');
+          const name = event.name ?? '';
+          setToolCalls(prev => prev.map(tc =>
+            tc.name === name && tc.loading
+              ? { ...tc, loading: false, success: (event as Record<string, unknown>).success as boolean, result: (event as Record<string, unknown>).result as string | undefined }
+              : tc
+          ));
         } else if (event.type === 'error') {
           setMessages(prev => {
             const updated = [...prev];
@@ -76,7 +114,6 @@ export default function ChatPage() {
     }
 
     setLoading(false);
-    setToolStatus('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -102,10 +139,11 @@ export default function ChatPage() {
             )}
           </div>
         ))}
-        {toolStatus && (
-          <div className="chat-tool-status">
-            <span className="chat-tool-spinner" />
-            {toolStatus}
+        {toolCalls.length > 0 && (
+          <div className="chat-tool-calls">
+            {toolCalls.map((tc, i) => (
+              <ToolCallBlock key={`${tc.name}-${i}`} call={tc} />
+            ))}
           </div>
         )}
         <div ref={bottomRef} />

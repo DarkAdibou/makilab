@@ -8,6 +8,7 @@ const SECTIONS = [
     items: [
       { href: '/', label: 'Command Center', icon: '🏠' },
       { href: '/chat', label: 'Chat', icon: '💬' },
+      { href: '/activity', label: 'Activite', icon: '\u{1F4CA}' },
     ],
   },
   {

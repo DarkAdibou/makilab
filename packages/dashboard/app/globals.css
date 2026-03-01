@@ -540,3 +540,28 @@ body {
 .tag-suggestions { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag-suggestion { padding: 4px 8px; font-size: 0.75rem; }
 .detail-panel-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+
+/* ─── Activity ─── */
+.activity-container { display: flex; flex-direction: column; gap: 16px; }
+.activity-header { display: flex; align-items: center; justify-content: space-between; }
+.activity-timeline { display: flex; flex-direction: column; gap: 2px; }
+.activity-event { padding: 12px 16px; border-radius: var(--radius); cursor: pointer; transition: background 0.15s; border: 1px solid var(--border); }
+.activity-event:hover { background: var(--muted); }
+.activity-event-header { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; }
+.activity-icon { font-size: 1rem; }
+.activity-event-name { font-weight: 500; }
+.activity-event-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.8125rem; }
+.activity-event-detail pre { background: var(--muted); padding: 8px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 4px 0; }
+
+/* ─── Tool call blocks ─── */
+.chat-tool-calls { display: flex; flex-direction: column; gap: 4px; max-width: 75%; }
+.tool-call-block { border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8125rem; }
+.tool-call-block.loading { border-color: var(--primary); }
+.tool-call-block.success { border-color: #22c55e; }
+.tool-call-block.error { border-color: var(--destructive); }
+.tool-call-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; }
+.tool-call-header:hover { background: var(--muted); border-radius: var(--radius); }
+.tool-call-name { font-weight: 500; flex: 1; }
+.tool-call-expand { font-size: 0.625rem; color: var(--muted-foreground); }
+.tool-call-detail { padding: 8px 12px; border-top: 1px solid var(--border); }
+.tool-call-detail pre { background: var(--muted); padding: 8px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 4px 0; }
