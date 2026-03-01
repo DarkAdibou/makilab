@@ -138,6 +138,7 @@ function initSchema(db: DatabaseSync): void {
   migrateTasksAddBacklog(db);
   repairTaskStepsFk(db);
   migrateTasksAddDescriptionTags(db);
+  migrateTasksAddCronFields(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -298,6 +299,28 @@ function migrateTasksAddDescriptionTags(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_description_tags')").run();
 }
 
+/** Migration: add cron fields to tasks for recurring task support */
+function migrateTasksAddCronFields(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'tasks_add_cron_fields'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+  ).get() as { sql: string } | undefined);
+
+  if (schema?.sql.includes('cron_expression')) {
+    db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_cron_fields')").run();
+    return;
+  }
+
+  db.exec('ALTER TABLE tasks ADD COLUMN cron_expression TEXT');
+  db.exec('ALTER TABLE tasks ADD COLUMN cron_enabled INTEGER NOT NULL DEFAULT 0');
+  db.exec('ALTER TABLE tasks ADD COLUMN cron_prompt TEXT');
+  db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_cron_fields')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -428,6 +451,9 @@ export interface TaskRow {
   cron_id: string | null;
   description: string;
   tags: string; // JSON array string
+  cron_expression: string | null;
+  cron_enabled: number; // 0 or 1
+  cron_prompt: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -457,11 +483,14 @@ export function createTask(params: {
   cronId?: string;
   description?: string;
   tags?: string[];
+  cronExpression?: string;
+  cronEnabled?: boolean;
+  cronPrompt?: string;
 }): string {
   const id = randomUUID();
   getDb().prepare(`
-    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id, description, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id, description, tags, cron_expression, cron_enabled, cron_prompt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.title,
@@ -473,6 +502,9 @@ export function createTask(params: {
     params.cronId ?? null,
     params.description ?? '',
     JSON.stringify(params.tags ?? []),
+    params.cronExpression ?? null,
+    params.cronEnabled ? 1 : 0,
+    params.cronPrompt ?? null,
   );
   return id;
 }
@@ -547,15 +579,28 @@ export function updateTaskStep(stepId: number, update: {
 }
 
 /** Update a task's fields (partial update) */
-export function updateTask(id: string, fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null }): TaskRow | null {
+export function updateTask(id: string, fields: {
+  status?: string;
+  title?: string;
+  priority?: string;
+  description?: string;
+  tags?: string[];
+  due_at?: string | null;
+  cron_expression?: string | null;
+  cron_enabled?: boolean;
+  cron_prompt?: string | null;
+}): TaskRow | null {
   const sets: string[] = [];
-  const params: (string | null)[] = [];
+  const params: (string | number | null)[] = [];
   if (fields.status) { sets.push('status = ?'); params.push(fields.status); }
   if (fields.title) { sets.push('title = ?'); params.push(fields.title); }
   if (fields.priority) { sets.push('priority = ?'); params.push(fields.priority); }
   if (fields.description !== undefined) { sets.push('description = ?'); params.push(fields.description); }
   if (fields.tags !== undefined) { sets.push('tags = ?'); params.push(JSON.stringify(fields.tags)); }
   if (fields.due_at !== undefined) { sets.push('due_at = ?'); params.push(fields.due_at); }
+  if (fields.cron_expression !== undefined) { sets.push('cron_expression = ?'); params.push(fields.cron_expression); }
+  if (fields.cron_enabled !== undefined) { sets.push('cron_enabled = ?'); params.push(fields.cron_enabled ? 1 : 0); }
+  if (fields.cron_prompt !== undefined) { sets.push('cron_prompt = ?'); params.push(fields.cron_prompt); }
   if (sets.length === 0) return getTask(id);
   sets.push("updated_at = datetime('now')");
   params.push(id);
@@ -580,6 +625,12 @@ export function getUniqueTags(): string[] {
     } catch { /* skip */ }
   }
   return [...tagSet].sort();
+}
+
+/** List all tasks with cron_enabled = 1 */
+export function listRecurringTasks(): TaskRow[] {
+  const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_enabled = 1 ORDER BY created_at DESC');
+  return [...stmt.all()] as unknown as TaskRow[];
 }
 
 /** Get dashboard statistics */
