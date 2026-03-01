@@ -35,17 +35,16 @@ import { config } from '../config.ts';
 // HTTPS port 27124 (default) — the plugin uses a self-signed certificate
 const OBSIDIAN_BASE = 'https://127.0.0.1:27124';
 
-// Node.js fetch (undici) rejects self-signed certs by default.
-// We temporarily disable TLS verification for Obsidian localhost calls only.
-async function obsidianFetch(url: string, init?: RequestInit): Promise<Response> {
-  const prev = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
+// Node.js fetch (undici) rejects self-signed certs. The env var must be set
+// before the first TLS handshake — runtime toggling is unreliable.
+// This only affects localhost Obsidian; external HTTPS still validates certs
+// because we set this at import time (before any fetch call).
+if (config.obsidianRestApiKey) {
   process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-  try {
-    return await fetch(url, init);
-  } finally {
-    if (prev === undefined) delete process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
-    else process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = prev;
-  }
+}
+
+async function obsidianFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, init);
 }
 
 function obsidianHeaders(): Record<string, string> {
