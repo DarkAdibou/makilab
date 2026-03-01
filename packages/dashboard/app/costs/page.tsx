@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { fetchCostSummary, fetchCostHistory, fetchRecentUsage } from '../lib/api';
-import type { CostSummary, CostHistoryPoint, LlmUsageEntry } from '../lib/api';
+import Link from 'next/link';
+import { fetchCostSummary, fetchCostHistory, fetchRecentUsage, fetchSuggestions } from '../lib/api';
+import type { CostSummary, CostHistoryPoint, LlmUsageEntry, OptimizationSuggestion } from '../lib/api';
 
 type Period = 'day' | 'week' | 'month' | 'year';
 
@@ -22,6 +23,7 @@ export default function CostsPage() {
   const [summary, setSummary] = useState<CostSummary | null>(null);
   const [history, setHistory] = useState<CostHistoryPoint[]>([]);
   const [recent, setRecent] = useState<LlmUsageEntry[]>([]);
+  const [suggestions, setSuggestions] = useState<OptimizationSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,10 +32,12 @@ export default function CostsPage() {
       fetchCostSummary(period),
       fetchCostHistory(period === 'day' ? 1 : period === 'week' ? 7 : period === 'year' ? 365 : 30),
       fetchRecentUsage(30),
-    ]).then(([s, h, r]) => {
+      fetchSuggestions().catch(() => []),
+    ]).then(([s, h, r, sg]) => {
       setSummary(s);
       setHistory(h);
       setRecent(r);
+      setSuggestions(sg);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [period]);
 
@@ -179,6 +183,33 @@ export default function CostsPage() {
               </table>
             </div>
           </div>
+
+          {/* Potential savings */}
+          {suggestions.length > 0 && (
+            <div className="card command-section">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h2 style={{ margin: 0 }}>Economies potentielles</h2>
+                <Link href="/models" className="btn btn-ghost" style={{ padding: '6px 14px', fontSize: '0.8125rem', textDecoration: 'none' }}>
+                  Voir Models &rarr;
+                </Link>
+              </div>
+              {suggestions.map(s => (
+                <div key={s.taskType} className="costs-savings-row">
+                  <span className="badge badge-cron" style={{ minWidth: 80, textAlign: 'center' }}>{s.taskType}</span>
+                  <span className="costs-breakdown-label" style={{ minWidth: 100 }}>{s.currentModel.split('/').pop()}</span>
+                  <span style={{ color: 'var(--muted-foreground)' }}>&rarr;</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{s.suggestedName}</span>
+                  <span className="costs-breakdown-bar-wrapper" style={{ maxWidth: 120 }}>
+                    <span
+                      className="costs-breakdown-bar"
+                      style={{ width: `${Math.min(s.savingsPercent, 100)}%`, background: '#22c55e' }}
+                    />
+                  </span>
+                  <span className="badge badge-success">-{s.savingsPercent.toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <p className="text-muted">Erreur de chargement</p>

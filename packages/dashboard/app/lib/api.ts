@@ -317,3 +317,135 @@ export async function* sendMessageStreamWithModel(
     }
   }
 }
+
+// ── Notifications ────────────────────────────────────────────────────
+
+export interface NotificationInfo {
+  id: string;
+  type: string;
+  severity: string;
+  title: string;
+  body: string;
+  link: string | null;
+  read: number;
+  created_at: string;
+}
+
+export async function fetchNotifications(unread = false, limit = 20): Promise<NotificationInfo[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (unread) params.set('unread', 'true');
+  const res = await fetch(`${API_BASE}/notifications?${params}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchUnreadCount(): Promise<number> {
+  const res = await fetch(`${API_BASE}/notifications/count`);
+  if (!res.ok) return 0;
+  const data = await res.json() as { unread: number };
+  return data.unread;
+}
+
+export async function markNotificationReadApi(id: string): Promise<void> {
+  await fetch(`${API_BASE}/notifications/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ read: true }),
+  });
+}
+
+export async function markAllNotificationsReadApi(): Promise<void> {
+  await fetch(`${API_BASE}/notifications/read-all`, { method: 'POST' });
+}
+
+// ── Catalog & Routes ─────────────────────────────────────────────────
+
+export interface CatalogModel {
+  id: string;
+  name: string;
+  provider_slug: string;
+  context_length: number;
+  price_input_per_m: number;
+  price_output_per_m: number;
+  supports_tools: number;
+  supports_reasoning: number;
+  modality: string;
+}
+
+export interface RouteWithSuggestions {
+  task_type: string;
+  model_id: string;
+  suggestions: Array<{ modelId: string; name: string; score: number; priceInput: number; priceOutput: number }>;
+}
+
+export interface OptimizationSuggestion {
+  taskType: string;
+  currentModel: string;
+  currentPriceIn: number;
+  currentPriceOut: number;
+  suggestedModel: string;
+  suggestedName: string;
+  suggestedPriceIn: number;
+  suggestedPriceOut: number;
+  savingsPercent: number;
+}
+
+export async function fetchCatalog(filters?: Record<string, string>): Promise<CatalogModel[]> {
+  const params = new URLSearchParams(filters);
+  const res = await fetch(`${API_BASE}/models/catalog?${params}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRoutes(): Promise<RouteWithSuggestions[]> {
+  const res = await fetch(`${API_BASE}/models/routes`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function updateRouteApi(taskType: string, modelId: string): Promise<void> {
+  await fetch(`${API_BASE}/models/routes/${taskType}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_id: modelId }),
+  });
+}
+
+export async function refreshCatalogApi(): Promise<{ count: number }> {
+  const res = await fetch(`${API_BASE}/models/refresh`, { method: 'POST' });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchSuggestions(): Promise<OptimizationSuggestion[]> {
+  const res = await fetch(`${API_BASE}/models/suggestions`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchCatalogMeta(): Promise<{ count: number; lastUpdate: string | null }> {
+  const res = await fetch(`${API_BASE}/models/meta`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+// ── Notification Settings ────────────────────────────────────────────
+
+export interface NotificationSettingInfo {
+  channel: string;
+  enabled: number;
+  types_filter: string | null;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+}
+
+export async function fetchNotificationSettings(): Promise<NotificationSettingInfo[]> {
+  const res = await fetch(`${API_BASE}/notification-settings`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function updateNotificationSettingsApi(channel: string, fields: Partial<NotificationSettingInfo>): Promise<void> {
+  await fetch(`${API_BASE}/notification-settings/${channel}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+}

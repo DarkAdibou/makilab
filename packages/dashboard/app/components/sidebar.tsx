@@ -18,6 +18,13 @@ const SECTIONS = [
       { href: '/tasks', label: 'Taches', icon: '\u{1F504}' },
       { href: '/connections', label: 'Connections', icon: '\u{1F50C}' },
       { href: '/costs', label: 'Costs', icon: '\u{1F4B0}' },
+      { href: '/models', label: 'Models', icon: '\u{1F916}' },
+    ],
+  },
+  {
+    label: 'SETTINGS',
+    items: [
+      { href: '/settings/notifications', label: 'Notifications', icon: '\u{1F514}' },
     ],
   },
 ];

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Sidebar } from './components/sidebar';
+import { NotificationBell } from './components/notification-bell';
 
 export const metadata: Metadata = {
   title: 'Makilab — Mission Control',
@@ -12,9 +13,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className="dark">
       <body>
         <Sidebar />
-        <main className="main-content">
-          {children}
-        </main>
+        <div className="layout-right">
+          <header className="top-header">
+            <NotificationBell />
+          </header>
+          <main className="main-content">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );
