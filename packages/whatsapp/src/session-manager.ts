@@ -168,10 +168,12 @@ export class WhatsAppSessionManager {
         // Skip only messages sent to other contacts
         if (msg.key.fromMe && msg.key.remoteJid !== this.allowedNumber) continue;
 
-        // Dedup: Baileys fires duplicate events for self-messages
-        const msgId = msg.key.id ?? '';
-        if (this.recentMessageIds.has(msgId)) continue;
-        this.recentMessageIds.add(msgId);
+        // Dedup: Baileys fires duplicate events for self-messages (different IDs)
+        const ts = msg.messageTimestamp as number;
+        const textPreview = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').slice(0, 50);
+        const dedupKey = `${ts}:${textPreview}`;
+        if (this.recentMessageIds.has(dedupKey)) continue;
+        this.recentMessageIds.add(dedupKey);
         if (this.recentMessageIds.size > 100) {
           const first = this.recentMessageIds.values().next().value!;
           this.recentMessageIds.delete(first);
