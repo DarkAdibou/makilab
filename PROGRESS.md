@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E18 terminé — SearXNG Integration ✅
+## Statut global : 🟢 E19 terminé — WhatsApp unifié dans Fastify ✅
 
 ---
 
@@ -29,7 +29,8 @@
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
 | E18 | SearXNG — self-hosted search (remplace Brave primary) | 🟠 Important | ✅ Terminé |
-| E19 | WhatsApp unifié — fusionner gateway dans Fastify (processus unique) | 🟠 Important | 🔲 Non démarré |
+| E14.5 | Smart Model Catalog + Notifications (catalogue OpenRouter dynamique, moteur notifs) | 🟠 Important | 🔲 Non démarré |
+| E19 | WhatsApp unifié — fusionner gateway dans Fastify (processus unique) | 🟠 Important | ✅ Terminé |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
 
 ---
@@ -247,17 +248,38 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 | L18.3 | Fallback logic: SearXNG → Brave → error | ✅ |
 | L18.4 | Tests web subagent (9 tests) | ✅ |
 
+## E19 — WhatsApp unifié dans Fastify
+
+Design : `docs/plans/2026-03-01-e19-whatsapp-unified-design.md`
+Plan : `docs/plans/2026-03-01-e19-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L19.1 | Dépendances Baileys dans agent package | ✅ |
+| L19.2 | session-manager.ts + gateway.ts dans agent | ✅ |
+| L19.3 | Config WHATSAPP_ALLOWED_NUMBER optionnel | ✅ |
+| L19.4 | Boot WhatsApp dans Fastify + endpoints API | ✅ |
+| L19.5 | Suppression packages/whatsapp + cleanup | ✅ |
+
 ---
 
 ## Dernière session
 
-**Date :** 2026-03-01 (session 2)
+**Date :** 2026-03-01 (session 3)
 **Accompli :**
-- WhatsApp gateway fonctionnel — Baileys v6 LID compat, self-messaging, QR PNG, dedup
-- System prompt durci — l'agent ne crée plus de tâches récurrentes sans demande explicite
-- Stories ajoutées : L13.5.7 (CRON UX), L13.5.8 (résultat exécution visible), L14.12 (modèle par tâche)
+- E19 terminé — WhatsApp unifié dans Fastify, processus unique
+- Design + plan E14.5 Smart Model Catalog + Notifications (13 tasks)
+- Design + plan E16 Mémoire hybride unifiée (à écrire)
+- Catalogue OpenRouter téléchargé (342 modèles)
 
-**Fixes WhatsApp :**
+**E19 détails :**
+- session-manager.ts déplacé dans packages/agent/src/whatsapp/
+- gateway.ts créé : init, status, send — branche sur runAgentLoop + SQLite
+- WHATSAPP_ALLOWED_NUMBER maintenant optionnel
+- 2 endpoints API : GET /api/whatsapp/status, POST /api/whatsapp/send
+- packages/whatsapp/ supprimé
+
+**Fixes WhatsApp (session 2) :**
 - `makeWASocket` named export (pas default en Baileys v6)
 - Format LID (`@lid`) au lieu de `@s.whatsapp.net` — `WHATSAPP_ALLOWED_NUMBER` + `WHATSAPP_REPLY_JID`
 - `??` → `||` pour extraction texte (string vide passait le nullish coalescing)
@@ -267,14 +289,14 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (21 endpoints)
-- `pnpm dev:whatsapp` : WhatsApp Baileys gateway (processus séparé)
+- `pnpm dev:api` : API Fastify port 3100 (23 endpoints) — inclut WhatsApp gateway
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (8 pages)
 - `pnpm --filter @makilab/agent test` : 89 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 
-**Stories en attente :**
-- E19 — WhatsApp unifié dans Fastify (processus unique)
+**Prochaines étapes :**
+- E14.5 — Smart Model Catalog + Notifications (plan prêt, 13 tasks)
+- E16 — Mémoire hybride unifiée
 - Kanban UX polish — datepicker, autocomplétion tags, cards enrichies, thème dark/clair
 
 ---
@@ -297,9 +319,9 @@ Fichiers clés :
 - packages/agent/src/llm/ — LLM Router + Client unifié
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
+- packages/agent/src/whatsapp/ — WhatsApp Baileys gateway (unifié dans Fastify)
 - packages/dashboard/ — Next.js 15 Mission Control
-- packages/whatsapp/ — WhatsApp Baileys gateway
 
-Statut : E1-E7 ✅ E9-E11 ✅ E13-E14 ✅ E18 ✅
-Stories ouvertes : L13.5.7, L13.5.8, L14.12, E19
+Statut : E1-E7 ✅ E9-E11 ✅ E13-E14 ✅ E18-E19 ✅
+Prochaine étape : E14.5 (Smart Model Catalog + Notifications — plan prêt)
 ```
