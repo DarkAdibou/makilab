@@ -1,10 +1,13 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
 import { getRecentMessages, listTasks } from './memory/sqlite.ts';
 import { runAgentLoop } from './agent-loop.ts';
 
-export function buildServer() {
+export async function buildServer() {
   const app = Fastify({ logger: false });
+
+  await app.register(cors, { origin: true });
 
   app.get('/api/health', async () => ({
     status: 'ok',

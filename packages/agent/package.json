@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "node --no-warnings --import tsx/esm src/index.ts",
+    "dev:api": "node --no-warnings --import tsx/esm src/start-server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
+    "@fastify/cors": "^11.2.0",
     "@makilab/shared": "workspace:*",
     "dotenv": "^16.0.0",
     "fastify": "^5.7.4",

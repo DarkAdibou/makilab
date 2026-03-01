@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "dev:agent": "pnpm --filter @makilab/agent dev",
+    "dev:api": "pnpm --filter @makilab/agent dev:api",
     "dev:whatsapp": "pnpm --filter @makilab/whatsapp dev"
   },
   "devDependencies": {
