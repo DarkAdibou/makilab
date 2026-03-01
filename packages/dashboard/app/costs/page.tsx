@@ -202,10 +202,10 @@ export default function CostsPage() {
                   <span className="costs-breakdown-bar-wrapper" style={{ maxWidth: 120 }}>
                     <span
                       className="costs-breakdown-bar"
-                      style={{ width: `${Math.min(s.savingsPercent, 100)}%`, background: '#22c55e' }}
+                      style={{ width: `${Math.min(s.savingsPercent ?? 0, 100)}%`, background: '#22c55e' }}
                     />
                   </span>
-                  <span className="badge badge-success">-{s.savingsPercent.toFixed(0)}%</span>
+                  <span className="badge badge-success">-{(s.savingsPercent ?? 0).toFixed(0)}%</span>
                 </div>
               ))}
             </div>

@@ -133,7 +133,7 @@ export default function ModelsPage() {
               <div key={s.taskType} className="card models-suggestion-card">
                 <div className="models-suggestion-header">
                   <span className="badge badge-cron">{s.taskType}</span>
-                  <span className="badge badge-success">-{s.savingsPercent.toFixed(0)}%</span>
+                  <span className="badge badge-success">-{(s.savingsPercent ?? 0).toFixed(0)}%</span>
                 </div>
                 <div className="models-suggestion-body">
                   <div className="models-suggestion-arrow">
