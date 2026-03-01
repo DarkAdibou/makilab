@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E10.5 terminé — Kanban CRUD + Activity + Chat UX ✅ — Prochaine étape : E8 Gmail + Raycast
+## Statut global : 🟢 E9 terminé — Mémoire sémantique Qdrant + Voyage AI ✅
 
 ---
 
@@ -18,8 +18,8 @@
 | E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | ✅ Terminé |
 | E7 | Mission Control — Chat + Connections MVP | 🟠 Important | ✅ Terminé |
-| E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré |
-| E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | 🔲 Non démarré |
+| E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré (après E13) |
+| E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | ✅ Terminé |
 | E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | 🔲 Non démarré |
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Non démarré |
@@ -148,27 +148,44 @@ Plan : `docs/plans/2026-03-01-e10.5-implementation.md`
 | L10.5.7 | Page Activity — timeline events agent avec filtres et détails dépliables | ✅ |
 | L10.5.8 | Chat UX — streaming token par token + blocs tool calls dépliables | ✅ |
 
+## E9 — Mémoire sémantique
+
+Design : `docs/plans/2026-03-01-e9-semantic-memory-design.md`
+Plan : `docs/plans/2026-03-01-e9-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L9.1 | Dependencies (voyageai + @qdrant/js-client-rest) | ✅ |
+| L9.2 | Config — QDRANT_URL + VOYAGE_API_KEY | ✅ |
+| L9.3 | Embeddings client — Voyage AI wrapper + tests | ✅ |
+| L9.4 | Qdrant client — init, upsert, search + tests | ✅ |
+| L9.5 | SubAgent memory — search + index | ✅ |
+| L9.6 | Fire-and-forget indexation — conversations, summaries, facts | ✅ |
+| L9.7 | Qdrant init at boot | ✅ |
+| L9.8 | System prompt guidance for memory subagent | ✅ |
+
 ---
 
 ## Dernière session
 
 **Date :** 2026-03-01
 **Accompli :**
-- E10.5 ✅ Kanban CRUD + Activity Log + Chat UX amélioré
+- E9 ✅ Mémoire sémantique (Qdrant + Voyage AI)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (12 endpoints : health, subagents, messages, tasks/tags, tasks GET/POST/PATCH/DELETE, stats, activity, chat, chat/stream)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (6 pages : /, /activity, /chat, /tasks, /connections, /_not-found)
-- `pnpm --filter @makilab/agent test` : 35 tests ✅ (17 hardening + 10 tasks + 8 server)
-- 8 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant (conditionnel)
+- `pnpm dev:api` : API Fastify port 3100 (12 endpoints)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (6 pages)
+- `pnpm --filter @makilab/agent test` : 46 tests ✅ (17 hardening + 10 tasks + 8 server + 3 embeddings + 8 qdrant)
+- 9 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory (conditionnels)
 
-**E10.5 — Détails techniques :**
-- Kanban CRUD : description, tags JSON, due_at, FilterBar, TaskDetailPanel slide-in, DELETE avec confirmation
-- Tags : array JSON sur tasks, couleur par hash, autocomplétion depuis tags existants
-- Activity : table agent_events, logAgentEvent() dans agent loop, page /activity timeline
-- Chat UX : text_delta streaming token par token, tool_start avec args, tool_end avec result, blocs dépliables
-- Migration SQLite : ALTER TABLE tasks ADD description/tags, CREATE TABLE agent_events
+**E9 — Détails techniques :**
+- Voyage AI `voyage-3` embeddings (1024 dim), free tier 200M tokens/mois
+- Qdrant Docker self-hosted, 2 collections : `conversations` + `knowledge`
+- SubAgent `memory` : search (sémantique cross-collection) + index (manuel)
+- Fire-and-forget : indexation conversations après chaque échange, summaries après compaction, facts après extraction
+- Score threshold 0.3, top 5 résultats par défaut
+- Conditionnel : QDRANT_URL + VOYAGE_API_KEY requis, sinon graceful skip
 
 ---
 
@@ -188,9 +205,9 @@ Fichiers clés :
 - CLAUDE.md — contexte et règles permanentes
 - PROGRESS.md — état exact (source de vérité)
 - packages/agent/src/subagents/ — architecture subagents
-- packages/agent/src/memory/ — SQLite T1
+- packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅
-On reprend à : E8 — Canal Gmail entrant + Raycast webhook
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅
+Prochaine étape à décider (E8, E11, E12, E13, E14, E15)
 ```
