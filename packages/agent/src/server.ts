@@ -1,8 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listRecurringTasks } from './memory/sqlite.ts';
-import { syncRecurringTasks } from './tasks/cron.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost } from './memory/sqlite.ts';
+import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
+import { parseExpression } from 'cron-parser';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 import { getMcpStatus } from './mcp/bridge.ts';
@@ -50,10 +51,58 @@ export async function buildServer() {
     return getUniqueTags();
   });
 
-  // GET /api/tasks/recurring — list recurring tasks
+  // GET /api/tasks/recurring — list recurring tasks with stats
   app.get('/api/tasks/recurring', async () => {
-    return listRecurringTasks();
+    const tasks = listAllRecurringTasks();
+    return tasks.map((t) => {
+      const stats = getTaskExecutionStats(t.id);
+      const monthlyCost = getTaskMonthlyCost(t.id);
+      let nextRun: string | null = null;
+      if (t.cron_expression && t.cron_enabled) {
+        try {
+          const interval = parseExpression(t.cron_expression);
+          nextRun = interval.next().toISOString();
+        } catch { /* invalid cron */ }
+      }
+      return {
+        ...t,
+        stats: {
+          totalRuns: stats.totalRuns,
+          successCount: stats.successCount,
+          errorCount: stats.errorCount,
+          successRate: stats.totalRuns > 0 ? stats.successCount / stats.totalRuns : 0,
+          totalCost: stats.totalCost,
+          monthlyCost,
+          avgDurationMs: stats.avgDurationMs,
+          lastRun: stats.lastRun,
+          nextRun,
+        },
+      };
+    });
   });
+
+  // GET /api/tasks/:id/executions — execution history
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    '/api/tasks/:id/executions',
+    async (req, reply) => {
+      const task = getTask(req.params.id);
+      if (!task) return reply.status(404).send({ error: 'Task not found' });
+      const limit = parseInt(req.query.limit ?? '20', 10);
+      return listTaskExecutions(req.params.id, limit);
+    },
+  );
+
+  // POST /api/tasks/:id/execute — manual execution of a recurring task
+  app.post<{ Params: { id: string } }>(
+    '/api/tasks/:id/execute',
+    async (req, reply) => {
+      const task = getTask(req.params.id);
+      if (!task) return reply.status(404).send({ error: 'Task not found' });
+      if (!task.cron_prompt) return reply.status(400).send({ error: 'Task has no cron_prompt' });
+      const result = await executeRecurringTask(task);
+      return result;
+    },
+  );
 
   // GET /api/tasks
   app.get<{ Querystring: { status?: string; limit?: string; tag?: string; priority?: string; search?: string } }>(
