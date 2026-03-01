@@ -12,6 +12,7 @@ interface McpConnection {
   transport: StdioClientTransport;
   serverName: string;
   tools: Anthropic.Tool[];
+  connected: boolean;
 }
 
 const connections = new Map<string, McpConnection>();
@@ -72,12 +73,36 @@ async function connectServer(name: string, cfg: McpServerConfig): Promise<void> 
     cursor = result.nextCursor;
   } while (cursor);
 
-  connections.set(name, { client, transport, serverName: name, tools });
+  const conn: McpConnection = { client, transport, serverName: name, tools, connected: true };
+  connections.set(name, conn);
+
+  // Watch for transport close — remove tools if server crashes
+  transport.onclose = () => {
+    logger.warn({ server: name }, 'MCP server process closed — removing tools');
+    conn.connected = false;
+    conn.tools = [];
+  };
+
+  transport.onerror = (err) => {
+    logger.warn({ server: name, err: err instanceof Error ? err.message : String(err) }, 'MCP server transport error');
+    conn.connected = false;
+    conn.tools = [];
+  };
+}
+
+/** Get the status of all MCP connections for monitoring */
+export function getMcpStatus(): Array<{ server: string; connected: boolean; tools: string[] }> {
+  return [...connections.values()].map((conn) => ({
+    server: conn.serverName,
+    connected: conn.connected,
+    tools: conn.tools.map((t) => t.name),
+  }));
 }
 
 export function getMcpTools(): Anthropic.Tool[] {
   const allTools: Anthropic.Tool[] = [];
   for (const conn of connections.values()) {
+    if (!conn.connected) continue;
     allTools.push(...conn.tools);
   }
   return allTools;
@@ -108,7 +133,7 @@ export async function callMcpTool(
   }
 
   const conn = connections.get(parsed.server);
-  if (!conn) {
+  if (!conn || !conn.connected) {
     return { success: false, text: `MCP server "${parsed.server}" not connected` };
   }
 
@@ -116,7 +141,7 @@ export async function callMcpTool(
     const result = await conn.client.callTool(
       { name: parsed.tool, arguments: args },
       undefined,
-      { timeout: 60_000 },
+      { maxTotalTimeout: 60_000 },
     );
 
     const textParts: string[] = [];

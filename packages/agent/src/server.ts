@@ -5,6 +5,7 @@ import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTa
 import { syncRecurringTasks } from './tasks/cron.ts';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
+import { getMcpStatus } from './mcp/bridge.ts';
 
 export async function buildServer() {
   const app = Fastify({ logger: false });
@@ -16,6 +17,11 @@ export async function buildServer() {
     uptime: process.uptime(),
     subagentCount: getAllSubAgents().length,
   }));
+
+  // GET /api/mcp/status — MCP servers connection status
+  app.get('/api/mcp/status', async () => {
+    return getMcpStatus();
+  });
 
   // GET /api/subagents
   app.get('/api/subagents', async () => {

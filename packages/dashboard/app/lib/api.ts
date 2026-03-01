@@ -162,3 +162,15 @@ export async function fetchSubagents() {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json() as Promise<SubAgentInfo[]>;
 }
+
+export interface McpServerStatus {
+  server: string;
+  connected: boolean;
+  tools: string[];
+}
+
+export async function fetchMcpStatus(): Promise<McpServerStatus[]> {
+  const res = await fetch(`${API_BASE}/mcp/status`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
