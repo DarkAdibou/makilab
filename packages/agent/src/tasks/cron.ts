@@ -115,15 +115,18 @@ export function syncRecurringTasks(): void {
         logger.info({ taskId: task.id, title: task.title }, 'Running recurring task');
         const start = Date.now();
         try {
-          await runAgentLoop(task.cron_prompt!, {
+          const reply = await runAgentLoop(task.cron_prompt!, {
             channel: (task.channel as Channel) ?? 'cli',
             from: 'cron',
             history: [],
+            model: task.model ?? undefined,
           });
+          const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({
             taskId: task.id,
             status: 'success',
             durationMs: Date.now() - start,
+            resultSummary: summary,
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -148,21 +151,23 @@ export function syncRecurringTasks(): void {
 }
 
 /** Execute a recurring task immediately (manual trigger) */
-export async function executeRecurringTask(task: { id: string; cron_prompt: string | null; channel: string }): Promise<{ success: boolean; durationMs: number; error?: string }> {
+export async function executeRecurringTask(task: { id: string; cron_prompt: string | null; channel: string; model?: string | null }): Promise<{ success: boolean; durationMs: number; result?: string; error?: string }> {
   if (!task.cron_prompt) {
     return { success: false, durationMs: 0, error: 'No cron_prompt defined' };
   }
 
   const start = Date.now();
   try {
-    await runAgentLoop(task.cron_prompt, {
+    const reply = await runAgentLoop(task.cron_prompt, {
       channel: (task.channel as Channel) ?? 'cli',
       from: 'cron',
       history: [],
+      model: task.model ?? undefined,
     });
     const durationMs = Date.now() - start;
-    logTaskExecution({ taskId: task.id, status: 'success', durationMs });
-    return { success: true, durationMs };
+    const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
+    logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
+    return { success: true, durationMs, result: summary };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const durationMs = Date.now() - start;

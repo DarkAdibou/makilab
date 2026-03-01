@@ -64,6 +64,7 @@ export interface TaskInfo {
   cron_expression: string | null;
   cron_enabled: number; // 0 or 1
   cron_prompt: string | null;
+  model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,7 +96,7 @@ export async function createTaskApi(
 
 export async function updateTaskApi(
   id: string,
-  fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null },
+  fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null; model?: string | null },
 ): Promise<TaskInfo> {
   const res = await fetch(`${API_BASE}/tasks/${id}`, {
     method: 'PATCH',

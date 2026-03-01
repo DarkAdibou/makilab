@@ -141,6 +141,7 @@ function initSchema(db: DatabaseSync): void {
   migrateTasksAddCronFields(db);
   migrateTaskExecutions(db);
   migrateLlmUsage(db);
+  migrateTasksAddModel(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -374,6 +375,22 @@ function migrateLlmUsage(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_usage')").run();
 }
 
+function migrateTasksAddModel(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'tasks_add_model'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+  ).get() as { sql: string } | undefined);
+
+  if (!schema?.sql.includes('model')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN model TEXT');
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_model')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -507,6 +524,7 @@ export interface TaskRow {
   cron_expression: string | null;
   cron_enabled: number; // 0 or 1
   cron_prompt: string | null;
+  model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -642,6 +660,7 @@ export function updateTask(id: string, fields: {
   cron_expression?: string | null;
   cron_enabled?: boolean;
   cron_prompt?: string | null;
+  model?: string | null;
 }): TaskRow | null {
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
@@ -654,6 +673,7 @@ export function updateTask(id: string, fields: {
   if (fields.cron_expression !== undefined) { sets.push('cron_expression = ?'); params.push(fields.cron_expression); }
   if (fields.cron_enabled !== undefined) { sets.push('cron_enabled = ?'); params.push(fields.cron_enabled ? 1 : 0); }
   if (fields.cron_prompt !== undefined) { sets.push('cron_prompt = ?'); params.push(fields.cron_prompt); }
+  if (fields.model !== undefined) { sets.push('model = ?'); params.push(fields.model); }
   if (sets.length === 0) return getTask(id);
   sets.push("updated_at = datetime('now')");
   params.push(id);

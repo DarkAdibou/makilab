@@ -158,7 +158,7 @@ export async function buildServer() {
   );
 
   // PATCH /api/tasks/:id — update task fields
-  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null } }>(
+  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null; cron_expression?: string | null; cron_enabled?: boolean; cron_prompt?: string | null; model?: string | null } }>(
     '/api/tasks/:id',
     async (req, reply) => {
       const existing = getTask(req.params.id);

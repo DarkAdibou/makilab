@@ -7,8 +7,10 @@ import {
   executeTaskNow,
   updateTaskApi,
   deleteTaskApi,
+  fetchModels,
   type RecurringTaskInfo,
   type TaskExecution,
+  type ModelInfo,
 } from '../lib/api';
 
 function humanCron(expr: string): string {
@@ -21,6 +23,28 @@ function humanCron(expr: string): string {
   if (dom !== '*' && dow === '*' && hour !== '*') return `Le ${dom} du mois ${hour}h${min === '0' ? '' : min}`;
   return expr;
 }
+
+type CronFreq = 'daily' | 'weekly' | 'monthly' | 'custom';
+
+function parseCron(expr: string): { freq: CronFreq; hour: string; minute: string; dow: string; dom: string } {
+  const parts = expr.split(' ');
+  if (parts.length !== 5) return { freq: 'custom', hour: '8', minute: '0', dow: '1', dom: '1' };
+  const [min, hour, dom, , dow] = parts;
+  if (dow !== '*' && dom === '*') return { freq: 'weekly', hour: hour!, minute: min!, dow: dow!, dom: '1' };
+  if (dom !== '*' && dow === '*') return { freq: 'monthly', hour: hour!, minute: min!, dow: '1', dom: dom! };
+  if (hour !== '*') return { freq: 'daily', hour: hour!, minute: min!, dow: '1', dom: '1' };
+  return { freq: 'custom', hour: '8', minute: '0', dow: '1', dom: '1' };
+}
+
+function buildCron(freq: CronFreq, hour: string, minute: string, dow: string, dom: string): string {
+  if (freq === 'daily') return `${minute} ${hour} * * *`;
+  if (freq === 'weekly') return `${minute} ${hour} * * ${dow}`;
+  if (freq === 'monthly') return `${minute} ${hour} ${dom} * *`;
+  return `${minute} ${hour} * * *`;
+}
+
+const FREQ_LABELS: Record<CronFreq, string> = { daily: 'Tous les jours', weekly: 'Chaque semaine', monthly: 'Chaque mois', custom: 'Personnalisé' };
+const DOW_LABELS: Record<string, string> = { '1': 'Lundi', '2': 'Mardi', '3': 'Mercredi', '4': 'Jeudi', '5': 'Vendredi', '6': 'Samedi', '0': 'Dimanche' };
 
 function formatDuration(ms: number | null): string {
   if (!ms) return '-';
@@ -46,6 +70,83 @@ function relativeTime(iso: string | null): string {
   return `Il y a ${days}j`;
 }
 
+function CronEditor({ value, onChange }: { value: string; onChange: (cron: string) => void }) {
+  const parsed = parseCron(value);
+  const [freq, setFreq] = useState<CronFreq>(parsed.freq);
+  const [hour, setHour] = useState(parsed.hour);
+  const [minute, setMinute] = useState(parsed.minute);
+  const [dow, setDow] = useState(parsed.dow);
+  const [dom, setDom] = useState(parsed.dom);
+  const [showRaw, setShowRaw] = useState(parsed.freq === 'custom');
+
+  // Sync when external value changes (task selection)
+  useEffect(() => {
+    const p = parseCron(value);
+    setFreq(p.freq);
+    setHour(p.hour);
+    setMinute(p.minute);
+    setDow(p.dow);
+    setDom(p.dom);
+    setShowRaw(p.freq === 'custom');
+  }, [value]);
+
+  function emit(f: CronFreq, h: string, m: string, d: string, dm: string) {
+    if (f === 'custom') return;
+    onChange(buildCron(f, h, m, d, dm));
+  }
+
+  const selectStyle = { padding: '6px 10px', fontSize: '0.8125rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '6px' };
+
+  if (showRaw) {
+    return (
+      <div className="detail-cron-info">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="detail-label" style={{ marginTop: 0 }}>Expression CRON</span>
+          <button className="btn btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px' }} onClick={() => { setShowRaw(false); setFreq('daily'); emit('daily', hour, minute, dow, dom); }}>Mode simple</button>
+        </div>
+        <input
+          className="textarea"
+          style={{ height: 'auto', padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="0 7 * * *"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail-cron-info">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="detail-label" style={{ marginTop: 0 }}>Planification</span>
+        <button className="btn btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px' }} onClick={() => setShowRaw(true)}>CRON brut</button>
+      </div>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <select style={selectStyle} value={freq} onChange={e => { const f = e.target.value as CronFreq; setFreq(f); emit(f, hour, minute, dow, dom); }}>
+          {Object.entries(FREQ_LABELS).filter(([k]) => k !== 'custom').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        {freq === 'weekly' && (
+          <select style={selectStyle} value={dow} onChange={e => { setDow(e.target.value); emit(freq, hour, minute, e.target.value, dom); }}>
+            {Object.entries(DOW_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        )}
+        {freq === 'monthly' && (
+          <select style={selectStyle} value={dom} onChange={e => { setDom(e.target.value); emit(freq, hour, minute, dow, e.target.value); }}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={String(d)}>Le {d}</option>)}
+          </select>
+        )}
+        <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>à</span>
+        <select style={{ ...selectStyle, width: '70px' }} value={hour} onChange={e => { setHour(e.target.value); emit(freq, e.target.value, minute, dow, dom); }}>
+          {Array.from({ length: 24 }, (_, i) => <option key={i} value={String(i)}>{String(i).padStart(2, '0')}h</option>)}
+        </select>
+        <select style={{ ...selectStyle, width: '70px' }} value={minute} onChange={e => { setMinute(e.target.value); emit(freq, hour, e.target.value, dow, dom); }}>
+          {[0, 5, 10, 15, 20, 30, 45].map(m => <option key={m} value={String(m)}>{String(m).padStart(2, '0')}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ task }: { task: RecurringTaskInfo }) {
   if (!task.cron_enabled) return <span className="badge badge-muted">Pause</span>;
   if (task.stats.errorCount > 0 && task.stats.lastRun) {
@@ -63,6 +164,7 @@ export default function RecurringTasksPage() {
   const [editingCron, setEditingCron] = useState('');
   const [editingPrompt, setEditingPrompt] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [models, setModels] = useState<ModelInfo[]>([]);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -72,7 +174,7 @@ export default function RecurringTasksPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
+  useEffect(() => { loadTasks(); fetchModels().then(setModels).catch(() => {}); }, [loadTasks]);
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -113,6 +215,14 @@ export default function RecurringTasksPage() {
       await loadTasks();
       const updated = tasks.find(t => t.id === selectedTask.id);
       if (updated) setSelectedTask(updated);
+    } catch (err) { console.error(err); }
+  }
+
+  async function saveCronDirect(cron: string) {
+    if (!selectedTask) return;
+    try {
+      await updateTaskApi(selectedTask.id, { cron_expression: cron || null });
+      await loadTasks();
     } catch (err) { console.error(err); }
   }
 
@@ -268,16 +378,32 @@ export default function RecurringTasksPage() {
                   <span>{selectedTask.cron_enabled ? 'Active' : 'En pause'}</span>
                 </div>
 
+                <CronEditor
+                  value={editingCron}
+                  onChange={(cron) => {
+                    setEditingCron(cron);
+                    if (cron !== (selectedTask.cron_expression ?? '')) {
+                      saveCronDirect(cron);
+                    }
+                  }}
+                />
+
                 <div className="detail-cron-info">
-                  <span className="detail-label" style={{ marginTop: 0 }}>Expression CRON</span>
-                  <input
-                    className="textarea"
-                    style={{ height: 'auto', padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}
-                    value={editingCron}
-                    onChange={e => setEditingCron(e.target.value)}
-                    onBlur={() => editingCron !== (selectedTask.cron_expression ?? '') && handleSaveConfig()}
-                    placeholder="0 7 * * *"
-                  />
+                  <span className="detail-label" style={{ marginTop: 0 }}>Modèle LLM</span>
+                  <select
+                    style={{ padding: '6px 10px', fontSize: '0.8125rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '6px', width: '100%' }}
+                    value={selectedTask.model ?? ''}
+                    onChange={async (e) => {
+                      const model = e.target.value || null;
+                      try {
+                        await updateTaskApi(selectedTask.id, { model });
+                        await loadTasks();
+                      } catch (err) { console.error(err); }
+                    }}
+                  >
+                    <option value="">Auto (router par défaut)</option>
+                    {models.map(m => <option key={m.id} value={m.id}>{m.label} ({m.provider})</option>)}
+                  </select>
                 </div>
 
                 <div className="detail-cron-info">

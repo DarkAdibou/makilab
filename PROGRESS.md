@@ -29,6 +29,7 @@
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
 | E18 | SearXNG — self-hosted search (remplace Brave primary) | 🟠 Important | ✅ Terminé |
+| E19 | WhatsApp unifié — fusionner gateway dans Fastify (processus unique) | 🟠 Important | 🔲 Non démarré |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
 
 ---
@@ -213,6 +214,8 @@ Design : `docs/plans/2026-03-01-e13.5-todo-recurring-tasks-design.md`
 | L13.5.4 | Page Tâches récurrentes (vue tableau, fréquence, statut, coût) | ✅ |
 | L13.5.5 | Panneau détail récurrent (config éditable, timeline, stats) | ✅ |
 | L13.5.6 | Bouton "Exécuter maintenant" + feedback | ✅ |
+| L13.5.7 | CRON user-friendly — sélecteur fréquence/heure + affichage lisible | ✅ |
+| L13.5.8 | "Exécuter maintenant" → résultat visible (réponse agent dans historique) | ✅ |
 
 ## E14 — LLM Router intelligent + Cost Tracking
 
@@ -232,7 +235,7 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 | L14.9 | Cost API endpoints + model param on chat | ✅ |
 | L14.10 | Dashboard Costs page (stats, history, breakdowns) | ✅ |
 | L14.11 | Chat model selector dropdown | ✅ |
-| L14.12 | Tasks model column (deferred — no DB migration needed yet) | ⏭️ |
+| L14.12 | Tasks model column — affichage + override modèle par tâche récurrente | ✅ |
 | L14.13 | PROGRESS.md update + verification | ✅ |
 
 ## E18 — SearXNG Integration
@@ -248,25 +251,31 @@ Plan : `docs/plans/2026-03-01-e14-implementation.md`
 
 ## Dernière session
 
-**Date :** 2026-03-01
+**Date :** 2026-03-01 (session 2)
 **Accompli :**
-- E14 ✅ LLM Router + Cost Tracking (13 tâches)
-- E18 ✅ SearXNG Integration (4 stories)
+- WhatsApp gateway fonctionnel — Baileys v6 LID compat, self-messaging, QR PNG, dedup
+- System prompt durci — l'agent ne crée plus de tâches récurrentes sans demande explicite
+- Stories ajoutées : L13.5.7 (CRON UX), L13.5.8 (résultat exécution visible), L14.12 (modèle par tâche)
+
+**Fixes WhatsApp :**
+- `makeWASocket` named export (pas default en Baileys v6)
+- Format LID (`@lid`) au lieu de `@s.whatsapp.net` — `WHATSAPP_ALLOWED_NUMBER` + `WHATSAPP_REPLY_JID`
+- `??` → `||` pour extraction texte (string vide passait le nullish coalescing)
+- Filtre `fromMe` adapté pour self-messaging
+- Dedup `messages.upsert` (Baileys fire 2x pour self-msgs)
+- QR code sauvegardé en PNG + auto-open
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (21 endpoints)
+- `pnpm dev:whatsapp` : WhatsApp Baileys gateway (processus séparé)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (8 pages)
 - `pnpm --filter @makilab/agent test` : 89 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
-- 0 `new Anthropic()` directes — tout passe par `createLlmClient()`
 
-**E18 — Détails techniques :**
-- SearXNG self-hosted via Docker (port 8080), config `SEARXNG_URL`
-- `searchSearxng()` : JSON API `/search?format=json`, timeout 10s
-- Fallback : SearXNG → Brave → error message
-- 9 tests : SearXNG results/empty/error/count + Brave results/missing key + fallback logic (3)
-- docker-compose.yml mis à jour avec service `searxng`
+**Stories en attente :**
+- E19 — WhatsApp unifié dans Fastify (processus unique)
+- Kanban UX polish — datepicker, autocomplétion tags, cards enrichies, thème dark/clair
 
 ---
 
@@ -280,7 +289,7 @@ Répertoire local : d:/SynologyDrive/IA et agents/makilab
 
 Contexte : self-hosté NUC N150/CasaOS, canaux WhatsApp+Mission Control+Gmail+Raycast.
 Stack : Node.js 24, TypeScript strict, pnpm workspaces, SDK Anthropic, node:sqlite, subagents comme Anthropic tools.
-Principes : Local First, Source=Destination, Smart Capture, CRON uniquement.
+Principes : Local First, Source=Destination, Smart Capture, CRON uniquement, Cost-Conscious.
 
 Fichiers clés :
 - CLAUDE.md — contexte et règles permanentes
@@ -289,7 +298,8 @@ Fichiers clés :
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
+- packages/whatsapp/ — WhatsApp Baileys gateway
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅ E14 ✅ E18 ✅
-Prochaine étape à décider (E8, E15, E16, E17)
+Statut : E1-E7 ✅ E9-E11 ✅ E13-E14 ✅ E18 ✅
+Stories ouvertes : L13.5.7, L13.5.8, L14.12, E19
 ```
