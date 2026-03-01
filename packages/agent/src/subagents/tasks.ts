@@ -19,7 +19,9 @@ import {
   getTask,
   listTasks,
   getTaskSteps,
+  listRecurringTasks,
 } from '../memory/sqlite.ts';
+import { syncRecurringTasks } from '../tasks/cron.ts';
 import { logger } from '../logger.ts';
 
 export const tasksSubAgent: SubAgent = {
@@ -36,10 +38,12 @@ export const tasksSubAgent: SubAgent = {
       inputSchema: {
         type: 'object',
         properties: {
-          title:    { type: 'string', description: 'Titre court de la tâche' },
-          priority: { type: 'string', description: 'Priorité', enum: ['low', 'medium', 'high'], default: 'medium' },
-          channel:  { type: 'string', description: 'Canal origine (whatsapp, cli...)' },
-          due_at:   { type: 'string', description: 'Échéance ISO 8601 (optionnel)' },
+          title:           { type: 'string', description: 'Titre court de la tâche' },
+          priority:        { type: 'string', description: 'Priorité', enum: ['low', 'medium', 'high'], default: 'medium' },
+          channel:         { type: 'string', description: 'Canal origine (whatsapp, cli...)' },
+          due_at:          { type: 'string', description: 'Échéance ISO 8601 (optionnel)' },
+          cron_expression: { type: 'string', description: 'Expression CRON pour tâches récurrentes (ex: "0 8 * * 1" = lundi 8h). Laisser vide pour une tâche ponctuelle.' },
+          cron_prompt:     { type: 'string', description: 'Le prompt à exécuter quand le CRON se déclenche' },
         },
         required: ['title', 'channel'],
       },
@@ -79,22 +83,37 @@ export const tasksSubAgent: SubAgent = {
         required: ['id', 'status'],
       },
     },
+    {
+      name: 'list_recurring',
+      description: 'Liste toutes les tâches récurrentes (activées et désactivées)',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
   ],
 
   async execute(action: string, input: Record<string, unknown>): Promise<SubAgentResult> {
     try {
       if (action === 'create') {
+        const cronExpr = input['cron_expression'] as string | undefined;
         const id = createTask({
           title: input['title'] as string,
           createdBy: 'user',
           channel: input['channel'] as string,
           priority: (input['priority'] as 'low' | 'medium' | 'high') ?? 'medium',
           dueAt: input['due_at'] as string | undefined,
+          cronExpression: cronExpr,
+          cronEnabled: !!cronExpr,
+          cronPrompt: input['cron_prompt'] as string | undefined,
         });
-        logger.info({ taskId: id, title: input['title'] }, 'Task created');
+        if (cronExpr) syncRecurringTasks();
+        logger.info({ taskId: id, title: input['title'], recurring: !!cronExpr }, 'Task created');
+        const recurringInfo = cronExpr ? ` (récurrente: ${cronExpr})` : '';
         return {
           success: true,
-          text: `Tâche créée : **${input['title'] as string}** (ID: ${id.slice(0, 8)}…)`,
+          text: `Tâche créée : **${input['title'] as string}**${recurringInfo} (ID: ${id.slice(0, 8)}…)`,
           data: { id },
         };
       }
@@ -145,6 +164,18 @@ export const tasksSubAgent: SubAgent = {
           text: `Tâche **${task.title}** → statut : **${input['status'] as string}**`,
           data: { id: input['id'], status: input['status'] },
         };
+      }
+
+      if (action === 'list_recurring') {
+        const tasks = listRecurringTasks();
+        if (tasks.length === 0) {
+          return { success: true, text: 'Aucune tâche récurrente configurée.' };
+        }
+        const formatted = tasks.map((t) => {
+          const status = t.cron_enabled ? 'Activée' : 'Désactivée';
+          return `- **${t.title}** — ${t.cron_expression} — ${status}\n  Prompt: ${t.cron_prompt ?? '(aucun)'}`;
+        }).join('\n');
+        return { success: true, text: `${tasks.length} tâche(s) récurrente(s):\n\n${formatted}`, data: tasks };
       }
 
       return { success: false, text: `Action inconnue: ${action}`, error: `Unknown action: ${action}` };
