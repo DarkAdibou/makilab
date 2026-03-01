@@ -16,6 +16,41 @@ export async function sendMessage(message: string, channel = 'mission_control') 
   return res.json() as Promise<{ reply: string }>;
 }
 
+/** Stream a chat response via SSE — yields parsed events */
+export async function* sendMessageStream(
+  message: string,
+  channel = 'mission_control',
+): AsyncGenerator<{ type: string; content?: string; name?: string; fullText?: string; message?: string; success?: boolean }> {
+  const res = await fetch(`${API_BASE}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, channel }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.body) throw new Error('No response body');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          yield JSON.parse(line.slice(6));
+        } catch { /* skip malformed */ }
+      }
+    }
+  }
+}
+
 export interface TaskInfo {
   id: string;
   title: string;

@@ -1,80 +1,127 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { fetchMessages, sendMessage } from '../lib/api';
 
-type Message = { role: 'user' | 'assistant'; content: string };
+import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { fetchMessages, sendMessageStream } from '../lib/api';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [toolStatus, setToolStatus] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    fetchMessages().then(setMessages).catch(console.error);
+    fetchMessages('mission_control', 50).then(setMessages).catch(() => {});
   }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, toolStatus]);
 
-  async function handleSend() {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  };
+
+  const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
     setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
     setLoading(true);
-    try {
-      const { reply } = await sendMessage(text);
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', content: "Erreur de communication avec l'agent." }]);
-    } finally {
-      setLoading(false);
-    }
-  }
+    setToolStatus('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    try {
+      let fullContent = '';
+      for await (const event of sendMessageStream(text)) {
+        if (event.type === 'text') {
+          fullContent += event.content ?? '';
+          const captured = fullContent;
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'assistant', content: captured };
+            return updated;
+          });
+        } else if (event.type === 'tool_start') {
+          const name = (event.name ?? '').replace('__', ' \u2192 ');
+          setToolStatus(`Utilisation de ${name}...`);
+        } else if (event.type === 'tool_end') {
+          setToolStatus('');
+        } else if (event.type === 'error') {
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'assistant', content: `Erreur: ${event.message}` };
+            return updated;
+          });
+        }
+      }
+    } catch {
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: 'assistant', content: 'Erreur de connexion' };
+        return updated;
+      });
+    }
+
+    setLoading(false);
+    setToolStatus('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  }
+  };
 
   return (
     <div className="chat-container">
       <div className="chat-header">
         <h1>Chat</h1>
-        <span className="badge badge-primary">mission_control</span>
+        <span className="badge badge-muted">mission_control</span>
       </div>
       <div className="chat-messages">
-        {messages.map((msg, i) => (
-          <div key={i} className={`chat-bubble ${msg.role}`}>
-            <div className="chat-bubble-content">{msg.content}</div>
+        {messages.map((m, i) => (
+          <div key={i} className={`chat-bubble ${m.role}`}>
+            {m.role === 'assistant' ? (
+              <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
+            ) : (
+              m.content
+            )}
           </div>
         ))}
-        {loading && (
-          <div className="chat-bubble assistant">
-            <div className="chat-bubble-content chat-typing">En train de reflechir...</div>
+        {toolStatus && (
+          <div className="chat-tool-status">
+            <span className="chat-tool-spinner" />
+            {toolStatus}
           </div>
         )}
         <div ref={bottomRef} />
       </div>
       <div className="chat-input-area">
         <textarea
+          ref={textareaRef}
           className="textarea chat-textarea"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
           placeholder="Envoyer un message..."
-          rows={2}
+          value={input}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          rows={1}
           disabled={loading}
         />
-        <button
-          className="btn btn-primary chat-send-btn"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-        >
+        <button className="btn btn-primary" onClick={handleSend} disabled={loading || !input.trim()}>
           Envoyer
         </button>
       </div>
