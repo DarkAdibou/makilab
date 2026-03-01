@@ -28,6 +28,7 @@ import { captureSubAgent } from './capture.ts';
 import { tasksSubAgent } from './tasks.ts';
 import { homeassistantSubAgent } from './homeassistant.ts';
 import { memorySubAgent } from './memory.ts';
+import { codeSubAgent } from './code.ts';
 
 /** All registered subagents — add new ones here */
 const SUBAGENTS: SubAgent[] = [
@@ -40,6 +41,7 @@ const SUBAGENTS: SubAgent[] = [
   tasksSubAgent,
   ...(config.haUrl ? [homeassistantSubAgent] : []),
   ...(config.qdrantUrl && config.voyageApiKey ? [memorySubAgent] : []),
+  codeSubAgent,
 ];
 
 /** Get a subagent by name — returns undefined if not registered */
