@@ -19,6 +19,7 @@ import {
   logAgentEvent,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
+import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
 import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
 import { createLlmClient } from './llm/client.ts';
@@ -103,10 +104,13 @@ export async function* runAgentLoopStreaming(
   const memorySection = buildMemoryPrompt(memCtx);
   const capabilitiesSection = buildCapabilitiesPrompt();
 
-  const systemParts = [BASE_SYSTEM_PROMPT];
-  if (memorySection) systemParts.push(memorySection);
-  if (capabilitiesSection) systemParts.push(capabilitiesSection);
-  const systemPrompt = systemParts.join('\n\n');
+  // E16: Auto-retrieve relevant memories + Obsidian context
+  const retrieval = await autoRetrieve(userMessage, channel);
+  const retrievalSection = buildRetrievalPrompt(retrieval);
+
+  const systemPrompt = [BASE_SYSTEM_PROMPT, memorySection, retrievalSection, capabilitiesSection]
+    .filter(Boolean)
+    .join('\n\n');
 
   const sqliteHistory = memCtx.recentMessages;
   const historyToUse = sqliteHistory.length > 0 ? sqliteHistory : (context.history ?? []);
