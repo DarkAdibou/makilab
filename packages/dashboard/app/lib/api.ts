@@ -174,3 +174,49 @@ export async function fetchMcpStatus(): Promise<McpServerStatus[]> {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+export interface RecurringTaskInfo extends TaskInfo {
+  stats: {
+    totalRuns: number;
+    successCount: number;
+    errorCount: number;
+    successRate: number;
+    totalCost: number;
+    monthlyCost: number;
+    avgDurationMs: number;
+    lastRun: string | null;
+    nextRun: string | null;
+  };
+}
+
+export async function fetchRecurringTasks(): Promise<RecurringTaskInfo[]> {
+  const res = await fetch(`${API_BASE}/tasks/recurring`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export interface TaskExecution {
+  id: number;
+  task_id: string;
+  status: string;
+  duration_ms: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  model: string | null;
+  cost_estimate: number | null;
+  result_summary: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export async function fetchTaskExecutions(taskId: string, limit = 20): Promise<TaskExecution[]> {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/executions?limit=${limit}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function executeTaskNow(taskId: string): Promise<{ success: boolean; durationMs: number; error?: string }> {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/execute`, { method: 'POST' });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
