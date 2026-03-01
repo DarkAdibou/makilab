@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E19 terminé — WhatsApp unifié dans Fastify ✅
+## Statut global : 🟢 E14.5 terminé — Smart Model Catalog + Notifications ✅
 
 ---
 
@@ -29,7 +29,7 @@
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
 | E18 | SearXNG — self-hosted search (remplace Brave primary) | 🟠 Important | ✅ Terminé |
-| E14.5 | Smart Model Catalog + Notifications (catalogue OpenRouter dynamique, moteur notifs) | 🟠 Important | 🔲 Non démarré |
+| E14.5 | Smart Model Catalog + Notifications (catalogue OpenRouter dynamique, moteur notifs) | 🟠 Important | ✅ Terminé |
 | E19 | WhatsApp unifié — fusionner gateway dans Fastify (processus unique) | 🟠 Important | ✅ Terminé |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
 
@@ -261,43 +261,61 @@ Plan : `docs/plans/2026-03-01-e19-implementation.md`
 | L19.4 | Boot WhatsApp dans Fastify + endpoints API | ✅ |
 | L19.5 | Suppression packages/whatsapp + cleanup | ✅ |
 
+## E14.5 — Smart Model Catalog + Notifications
+
+Design : `docs/plans/2026-03-01-e14.5-smart-catalog-notifications-design.md`
+Plan : `docs/plans/2026-03-01-e14.5-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L14.5.1 | SQLite migrations — llm_models, llm_route_config, notifications, notification_settings | ✅ |
+| L14.5.2 | catalog.ts — fetch OpenRouter API, cache SQLite, scoring, suggestions | ✅ |
+| L14.5.3 | Refactor pricing.ts + router.ts → lecture dynamique SQLite | ✅ |
+| L14.5.4 | Notification engine — store, dispatch multi-canal, quiet hours | ✅ |
+| L14.5.5 | CRON catalog refresh (3h) + boot init | ✅ |
+| L14.5.6 | API endpoints (12 nouveaux : catalog, routes, suggestions, notifications, settings) | ✅ |
+| L14.5.7 | classify-task.ts — classification LLM + auto-assignation modèle optimal | ✅ |
+| L14.5.8 | Dashboard NotificationBell — badge + dropdown | ✅ |
+| L14.5.9 | Page /models — suggestions, routing config, catalogue complet | ✅ |
+| L14.5.10 | Page /costs — refonte avec section savings | ✅ |
+| L14.5.11 | Page /settings/notifications — toggles canaux, types, quiet hours | ✅ |
+| L14.5.12 | Cost emitter + seed briefing hebdo récurrent | ✅ |
+
 ---
 
 ## Dernière session
 
-**Date :** 2026-03-01 (session 3)
+**Date :** 2026-03-01 (session 4)
 **Accompli :**
-- E19 terminé — WhatsApp unifié dans Fastify, processus unique
-- Design + plan E14.5 Smart Model Catalog + Notifications (13 tasks)
-- Design + plan E16 Mémoire hybride unifiée (à écrire)
-- Catalogue OpenRouter téléchargé (342 modèles)
+- E14.5 terminé — Smart Model Catalog + Notifications (12 stories)
+- Catalogue OpenRouter dynamique (342+ modèles, refresh quotidien CRON 3h)
+- Moteur de notifications multi-canal (mission_control, whatsapp, email)
+- Classification LLM automatique des tâches pour assignation modèle optimal
+- Dashboard : /models, /costs refonte, /settings/notifications, NotificationBell
+- Cost emitter + briefing hebdo récurrent auto-seedé
 
-**E19 détails :**
-- session-manager.ts déplacé dans packages/agent/src/whatsapp/
-- gateway.ts créé : init, status, send — branche sur runAgentLoop + SQLite
-- WHATSAPP_ALLOWED_NUMBER maintenant optionnel
-- 2 endpoints API : GET /api/whatsapp/status, POST /api/whatsapp/send
-- packages/whatsapp/ supprimé
-
-**Fixes WhatsApp (session 2) :**
-- `makeWASocket` named export (pas default en Baileys v6)
-- Format LID (`@lid`) au lieu de `@s.whatsapp.net` — `WHATSAPP_ALLOWED_NUMBER` + `WHATSAPP_REPLY_JID`
-- `??` → `||` pour extraction texte (string vide passait le nullish coalescing)
-- Filtre `fromMe` adapté pour self-messaging
-- Dedup `messages.upsert` (Baileys fire 2x pour self-msgs)
-- QR code sauvegardé en PNG + auto-open
+**E14.5 détails :**
+- 4 tables SQLite : llm_models, llm_route_config, notifications, notification_settings
+- 15 fonctions CRUD + 3 interfaces dans sqlite.ts
+- catalog.ts : fetch OpenRouter, scoring `1/(price+0.01)*bonus`, suggestions >5% savings
+- classify-task.ts : appel LLM (Haiku) → complexity/sensitive/needsTools → modèle optimal
+- engine.ts : store + dispatch, quiet hours (overnight 22-08), type filtering par canal
+- cost-emitter.ts : détection savings ≥30% → notification
+- 12 nouveaux endpoints API (catalog, routes, suggestions, notifications, settings)
+- Seed Anthropic models séparément (IDs différents d'OpenRouter)
+- Tâche récurrente "Briefing hebdo coûts LLM" seedée au boot (lundi 8h)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (23 endpoints) — inclut WhatsApp gateway
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (8 pages)
-- `pnpm --filter @makilab/agent test` : 89 tests ✅
+- `pnpm dev:api` : API Fastify port 3100 (35+ endpoints)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (12 pages)
+- `pnpm --filter @makilab/agent test` : 99 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 
 **Prochaines étapes :**
-- E14.5 — Smart Model Catalog + Notifications (plan prêt, 13 tasks)
 - E16 — Mémoire hybride unifiée
-- Kanban UX polish — datepicker, autocomplétion tags, cards enrichies, thème dark/clair
+- E8 — Canal Gmail entrant + Raycast webhook
+- Kanban UX polish — datepicker, autocomplétion tags, thème dark/clair
 
 ---
 
@@ -322,6 +340,6 @@ Fichiers clés :
 - packages/agent/src/whatsapp/ — WhatsApp Baileys gateway (unifié dans Fastify)
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1-E7 ✅ E9-E11 ✅ E13-E14 ✅ E18-E19 ✅
-Prochaine étape : E14.5 (Smart Model Catalog + Notifications — plan prêt)
+Statut : E1-E7 ✅ E9-E11 ✅ E13-E14.5 ✅ E18-E19 ✅
+Prochaine étape : E16 (Mémoire hybride unifiée)
 ```

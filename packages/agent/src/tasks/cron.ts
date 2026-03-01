@@ -103,6 +103,9 @@ export function startCron(): void {
       const { refreshCatalog } = await import('../llm/catalog.ts');
       const count = await refreshCatalog();
       logger.info({ count }, 'CRON: catalog refreshed');
+      // Check for cost optimization opportunities
+      const { checkCostOptimizations } = await import('../notifications/cost-emitter.ts');
+      await checkCostOptimizations();
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'CRON: catalog refresh failed');
     }

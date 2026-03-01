@@ -1,4 +1,4 @@
-import { upsertLlmModel, getLlmModels, getLlmModel, getLlmModelsCount, getLlmModelLastUpdate, getRouteForTaskType, getRouteConfig } from '../memory/sqlite.ts';
+import { upsertLlmModel, getLlmModels, getLlmModel, getLlmModelsCount, getLlmModelLastUpdate, getRouteForTaskType, getRouteConfig, createTask, listRecurringTasks } from '../memory/sqlite.ts';
 import type { LlmModelRow } from '../memory/sqlite.ts';
 import { logger } from '../logger.ts';
 import type { TaskType } from './router.ts';
@@ -98,6 +98,31 @@ export async function initCatalog(): Promise<void> {
       seedAnthropicModels();
       logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Catalog refresh failed — seeded Anthropic models only');
     }
+  }
+
+  // Seed weekly cost briefing task if not exists
+  seedWeeklyCostBriefing();
+}
+
+/** Create the weekly cost briefing recurring task if it doesn't exist yet */
+function seedWeeklyCostBriefing(): void {
+  try {
+    const existing = listRecurringTasks().find(t => t.cron_id === 'weekly_cost_briefing');
+    if (existing) return;
+
+    createTask({
+      title: 'Briefing hebdo coûts LLM',
+      createdBy: 'cron',
+      channel: 'mission_control',
+      cronId: 'weekly_cost_briefing',
+      cronExpression: '0 8 * * 1',
+      cronEnabled: true,
+      cronPrompt: 'Génère un résumé des coûts LLM de la semaine : tokens consommés par type de tâche, modèles utilisés, coût total, et suggestions d\'optimisation. Sois concis et actionnable.',
+      description: 'Briefing automatique hebdomadaire (lundi 8h) — résumé coûts et optimisations LLM',
+    });
+    logger.info({}, 'Seeded weekly cost briefing recurring task');
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Failed to seed weekly cost briefing — skipping');
   }
 }
 
