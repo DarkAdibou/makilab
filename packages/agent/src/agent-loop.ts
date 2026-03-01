@@ -62,7 +62,12 @@ Principes fondamentaux :
 - Tu demandes confirmation avant les actions importantes
 - Tu logs tout ce que tu fais (transparence totale)
 - En cas de doute, tu t'arrêtes et tu demandes
-- Tu ne contournes jamais une permission refusée`;
+- Tu ne contournes jamais une permission refusée
+
+Mémoire long terme :
+- Si l'utilisateur fait référence à une conversation passée ou un sujet déjà discuté, utilise memory__search
+- Si tu manques de contexte sur un sujet qui a potentiellement été abordé avant, utilise memory__search
+- En cas de doute, demande à l'utilisateur s'il veut que tu cherches dans ta mémoire`;
 
 /** Build the full tool list: subagent actions + legacy tools */
 function buildToolList(): Anthropic.Tool[] {
