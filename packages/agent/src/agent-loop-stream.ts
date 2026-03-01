@@ -20,6 +20,7 @@ import {
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
+import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
@@ -66,6 +67,9 @@ function buildToolList(): Anthropic.Tool[] {
       input_schema: t.input_schema,
     });
   }
+
+  // MCP tools (auto-discovered from connected servers)
+  anthropicTools.push(...getMcpTools());
 
   return anthropicTools;
 }
@@ -152,9 +156,19 @@ export async function* runAgentLoopStreaming(
           let resultContent: string;
           let success = true;
 
-          const isSubagent = block.name.includes(SUBAGENT_SEP);
-          const [subagentName, ...actionParts] = isSubagent ? block.name.split(SUBAGENT_SEP) : [undefined];
-          const actionName = isSubagent ? actionParts.join(SUBAGENT_SEP) : block.name;
+          const isMcp = isMcpTool(block.name);
+          const isSubagent = !isMcp && block.name.includes(SUBAGENT_SEP);
+
+          let subagentName: string | undefined;
+          let actionName: string;
+          if (isSubagent) {
+            const parts = block.name.split(SUBAGENT_SEP);
+            subagentName = parts[0];
+            actionName = parts.slice(1).join(SUBAGENT_SEP);
+          } else {
+            subagentName = isMcp ? 'mcp' : undefined;
+            actionName = block.name;
+          }
 
           yield { type: 'tool_start', name: block.name, args: block.input as Record<string, unknown> };
 
@@ -166,7 +180,12 @@ export async function* runAgentLoopStreaming(
             input: block.input,
           });
 
-          if (isSubagent) {
+          if (isMcp) {
+            logger.info({ tool: block.name }, 'MCP tool call');
+            const mcpResult = await callMcpTool(block.name, block.input as Record<string, unknown>);
+            resultContent = mcpResult.text;
+            success = mcpResult.success;
+          } else if (isSubagent) {
             const subagent = findSubAgent(subagentName ?? '');
             if (!subagent) {
               resultContent = `Erreur : subagent "${subagentName}" introuvable`;

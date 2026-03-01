@@ -3,6 +3,7 @@ import { logger } from './logger.ts';
 import { buildServer } from './server.ts';
 import { startCron } from './tasks/cron.ts';
 import { initCollections } from './memory/qdrant.ts';
+import { initMcpBridge, shutdownMcpBridge } from './mcp/bridge.ts';
 
 validateConfig(logger);
 startCron();
@@ -12,8 +13,23 @@ await initCollections().catch((err) => {
   logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Qdrant init failed — semantic memory disabled');
 });
 
+// Initialize MCP bridge (no-op if no enabled servers in mcp-servers.json)
+await initMcpBridge().catch((err) => {
+  logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'MCP bridge init failed');
+});
+
 const server = await buildServer();
 const port = parseInt(process.env['MAKILAB_API_PORT'] ?? '3100', 10);
+
+// Graceful shutdown
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, async () => {
+    logger.info({ signal }, 'Shutting down...');
+    await shutdownMcpBridge();
+    await server.close();
+    process.exit(0);
+  });
+}
 
 await server.listen({ port, host: '0.0.0.0' });
 logger.info(`API listening on http://0.0.0.0:${port}`);

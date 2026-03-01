@@ -38,6 +38,7 @@ import {
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { indexConversation, indexSummary } from './memory/semantic-indexer.ts';
+import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
@@ -94,6 +95,9 @@ function buildToolList(): Anthropic.Tool[] {
       input_schema: t.input_schema,
     });
   }
+
+  // MCP tools (auto-discovered from connected servers)
+  anthropicTools.push(...getMcpTools());
 
   return anthropicTools;
 }
@@ -205,8 +209,15 @@ export async function runAgentLoop(
 
         let resultContent: string;
 
-        // Subagent call (name contains SUBAGENT_SEP)
-        if (block.name.includes(SUBAGENT_SEP)) {
+        // MCP tool call (name starts with mcp_)
+        if (isMcpTool(block.name)) {
+          logger.info({ tool: block.name }, 'MCP tool call');
+          const result = await callMcpTool(block.name, block.input as Record<string, unknown>);
+          resultContent = result.text;
+          if (!result.success) {
+            resultContent = `Erreur: ${result.text}`;
+          }
+        } else if (block.name.includes(SUBAGENT_SEP)) {
           const [subagentName, ...actionParts] = block.name.split(SUBAGENT_SEP);
           const actionName = actionParts.join(SUBAGENT_SEP); // handle edge case
           const subagent = findSubAgent(subagentName ?? '');
