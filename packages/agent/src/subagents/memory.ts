@@ -10,7 +10,8 @@
 import { logger } from '../logger.ts';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { embedText } from '../memory/embeddings.ts';
-import { semanticSearch, upsertKnowledge } from '../memory/qdrant.ts';
+import { semanticSearch, upsertKnowledge, deleteByIds, CONVERSATIONS_COLLECTION, KNOWLEDGE_COLLECTION } from '../memory/qdrant.ts';
+import { getCoreMemory, deleteFact, searchMessagesFullText } from '../memory/sqlite.ts';
 
 export const memorySubAgent: SubAgent = {
   name: 'memory',
@@ -67,6 +68,31 @@ export const memorySubAgent: SubAgent = {
         required: ['content'],
       },
     },
+    {
+      name: 'forget',
+      description:
+        "Oublier un sujet — supprime les faits et souvenirs liés de toute la mémoire (SQLite + Qdrant)",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          topic: { type: 'string', description: 'Le sujet à oublier' },
+        },
+        required: ['topic'],
+      },
+    },
+    {
+      name: 'search_text',
+      description:
+        "Recherche par mots-clés dans l'historique des messages (FTS5, complémentaire à search sémantique)",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Mots-clés à chercher' },
+          limit: { type: 'number', description: 'Nombre max de résultats (défaut: 10)' },
+        },
+        required: ['query'],
+      },
+    },
   ],
 
   async execute(action: string, input: Record<string, unknown>): Promise<SubAgentResult> {
@@ -114,6 +140,67 @@ export const memorySubAgent: SubAgent = {
 
           await upsertKnowledge({ vector, type, content, key });
           return { success: true, text: `Contenu indexé dans la collection knowledge (type: ${type})` };
+        }
+
+        case 'forget': {
+          const topic = input.topic as string;
+          let deletedMemories = 0;
+          let deletedFacts = 0;
+
+          // 1. Semantic search Qdrant for related memories
+          const vector = await embedText(topic);
+          if (vector) {
+            const results = await semanticSearch(vector, 20);
+            const relevantResults = results.filter(r => r.score >= 0.5);
+
+            const convIds: string[] = [];
+            const knowledgeIds: string[] = [];
+            for (const r of relevantResults) {
+              if (r.collection === CONVERSATIONS_COLLECTION) {
+                convIds.push(r.id);
+              } else {
+                knowledgeIds.push(r.id);
+              }
+            }
+
+            await deleteByIds(CONVERSATIONS_COLLECTION, convIds);
+            await deleteByIds(KNOWLEDGE_COLLECTION, knowledgeIds);
+            deletedMemories = convIds.length + knowledgeIds.length;
+          }
+
+          // 2. Delete matching facts from core_memory
+          const facts = getCoreMemory();
+          const topicLower = topic.toLowerCase();
+          for (const [key, value] of Object.entries(facts)) {
+            if (key.toLowerCase().includes(topicLower) || value.toLowerCase().includes(topicLower)) {
+              deleteFact(key);
+              deletedFacts++;
+            }
+          }
+
+          return {
+            success: true,
+            text: `Oublié "${topic}" : ${deletedMemories} souvenir(s) Qdrant + ${deletedFacts} fait(s) SQLite supprimés.`,
+          };
+        }
+
+        case 'search_text': {
+          const query = input.query as string;
+          const limit = (input.limit as number) ?? 10;
+          const results = searchMessagesFullText(query, limit);
+
+          if (results.length === 0) {
+            return { success: true, text: `Aucun message trouvé pour "${query}"` };
+          }
+
+          const formatted = results.map(m =>
+            `[${m.channel}] ${m.created_at} (${m.role}): ${m.content.slice(0, 200)}`
+          ).join('\n');
+
+          return {
+            success: true,
+            text: `${results.length} message(s) trouvé(s) :\n${formatted}`,
+          };
         }
 
         default:

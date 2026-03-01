@@ -106,6 +106,8 @@ export async function upsertKnowledge(point: KnowledgePoint): Promise<void> {
 }
 
 export interface SearchResult {
+  id: string;
+  collection: string;
   score: number;
   payload: Record<string, unknown>;
 }
@@ -126,14 +128,28 @@ export async function semanticSearch(
     c.search(KNOWLEDGE_COLLECTION, { vector, limit, with_payload: true }),
   ]);
 
-  const all = [...convResults, ...knowResults]
+  const tagged = [
+    ...convResults.map((r) => ({ ...r, _collection: CONVERSATIONS_COLLECTION })),
+    ...knowResults.map((r) => ({ ...r, _collection: KNOWLEDGE_COLLECTION })),
+  ];
+
+  const all = tagged
     .filter((r) => r.score >= SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((r) => ({
+      id: String(r.id),
+      collection: r._collection,
       score: r.score,
       payload: r.payload as Record<string, unknown>,
     }));
 
   return all;
+}
+
+/** Delete points by ID from a collection */
+export async function deleteByIds(collection: string, ids: string[]): Promise<void> {
+  const c = getClient();
+  if (!c || ids.length === 0) return;
+  await c.delete(collection, { points: ids });
 }
