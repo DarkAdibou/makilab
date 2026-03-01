@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, getStats } from './memory/sqlite.ts';
 import { runAgentLoop } from './agent-loop.ts';
 
 export async function buildServer() {
@@ -61,6 +61,43 @@ export async function buildServer() {
       return { reply };
     },
   );
+
+  // POST /api/tasks — create a task from the dashboard
+  app.post<{ Body: { title: string; priority?: string; status?: string } }>(
+    '/api/tasks',
+    async (req, reply) => {
+      const { title, priority, status } = req.body;
+      const id = createTask({
+        title,
+        createdBy: 'user',
+        channel: 'mission_control',
+        priority: priority as 'low' | 'medium' | 'high' | undefined,
+      });
+      if (status && status !== 'pending') {
+        updateTask(id, { status });
+      }
+      const task = getTask(id);
+      return reply.status(201).send(task);
+    },
+  );
+
+  // PATCH /api/tasks/:id — update task fields
+  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string } }>(
+    '/api/tasks/:id',
+    async (req, reply) => {
+      const existing = getTask(req.params.id);
+      if (!existing) return reply.status(404).send({ error: 'Task not found' });
+      const task = updateTask(req.params.id, req.body);
+      return task;
+    },
+  );
+
+  // GET /api/stats — dashboard statistics
+  app.get('/api/stats', async () => {
+    const stats = getStats();
+    stats.subagentCount = getAllSubAgents().length;
+    return stats;
+  });
 
   return app;
 }

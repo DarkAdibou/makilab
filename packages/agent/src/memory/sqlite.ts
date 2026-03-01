@@ -491,6 +491,29 @@ export function updateTaskStep(stepId: number, update: {
   );
 }
 
+/** Update a task's fields (partial update) */
+export function updateTask(id: string, fields: { status?: string; title?: string; priority?: string }): TaskRow | null {
+  const sets: string[] = [];
+  const params: string[] = [];
+  if (fields.status) { sets.push('status = ?'); params.push(fields.status); }
+  if (fields.title) { sets.push('title = ?'); params.push(fields.title); }
+  if (fields.priority) { sets.push('priority = ?'); params.push(fields.priority); }
+  if (sets.length === 0) return getTask(id);
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  getDb().prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  return getTask(id);
+}
+
+/** Get dashboard statistics */
+export function getStats(): { messagesTotal: number; tasksActive: number; subagentCount: number; tasksDone7d: number } {
+  const db = getDb();
+  const messagesTotal = (db.prepare("SELECT COUNT(*) as c FROM messages WHERE channel = 'mission_control'").get() as { c: number }).c;
+  const tasksActive = (db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status IN ('pending','in_progress','waiting_user')").get() as { c: number }).c;
+  const tasksDone7d = (db.prepare("SELECT COUNT(*) as c FROM tasks WHERE status = 'done' AND updated_at >= datetime('now', '-7 days')").get() as { c: number }).c;
+  return { messagesTotal, tasksActive, subagentCount: 0, tasksDone7d };
+}
+
 /** Get all steps for a task, ordered */
 export function getTaskSteps(taskId: string): TaskStepRow[] {
   return getDb().prepare(`
