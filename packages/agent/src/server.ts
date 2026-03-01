@@ -1,13 +1,14 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 import { getMcpStatus } from './mcp/bridge.ts';
 import { listAvailableModels } from './llm/pricing.ts';
+import { refreshCatalog, scoreModelsForTask, getOptimizationSuggestions } from './llm/catalog.ts';
 import { getWhatsAppStatus, sendWhatsAppMessage } from './whatsapp/gateway.ts';
 
 export async function buildServer() {
@@ -230,6 +231,57 @@ export async function buildServer() {
     },
   );
 
+  // GET /api/models/catalog — full catalog with filters
+  app.get<{ Querystring: { tools?: string; minContext?: string; provider?: string } }>(
+    '/api/models/catalog',
+    async (req) => {
+      const filters: { tools?: boolean; minContext?: number; provider?: string } = {};
+      if (req.query.tools === 'true') filters.tools = true;
+      if (req.query.minContext) filters.minContext = parseInt(req.query.minContext, 10);
+      if (req.query.provider) filters.provider = req.query.provider;
+      return getLlmModels(filters);
+    },
+  );
+
+  // GET /api/models/routes — current routes + top 3 suggestions
+  app.get('/api/models/routes', async () => {
+    const routes = getRouteConfig();
+    return routes.map(r => ({
+      ...r,
+      suggestions: scoreModelsForTask(r.task_type as import('./llm/router.ts').TaskType, 3),
+    }));
+  });
+
+  // PATCH /api/models/routes/:taskType — change model for a task type
+  app.patch<{ Params: { taskType: string }; Body: { model_id: string } }>(
+    '/api/models/routes/:taskType',
+    async (req) => {
+      const { taskType } = req.params;
+      const { model_id } = req.body;
+      setRouteForTaskType(taskType, model_id);
+      return { success: true, taskType, model_id };
+    },
+  );
+
+  // POST /api/models/refresh — force catalog refresh
+  app.post('/api/models/refresh', async () => {
+    const count = await refreshCatalog();
+    return { success: true, count };
+  });
+
+  // GET /api/models/suggestions — optimization suggestions
+  app.get('/api/models/suggestions', async () => {
+    return getOptimizationSuggestions();
+  });
+
+  // GET /api/models/meta — catalog metadata
+  app.get('/api/models/meta', async () => {
+    return {
+      count: getLlmModelsCount(),
+      lastUpdate: getLlmModelLastUpdate(),
+    };
+  });
+
   // GET /api/models — available LLM models
   app.get('/api/models', async () => {
     return listAvailableModels();
@@ -278,6 +330,55 @@ export async function buildServer() {
       return { error: err instanceof Error ? err.message : String(err) };
     }
   });
+
+  // GET /api/notifications
+  app.get<{ Querystring: { unread?: string; limit?: string } }>(
+    '/api/notifications',
+    async (req) => {
+      const unreadOnly = req.query.unread === 'true';
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+      return getNotifications({ unreadOnly, limit });
+    },
+  );
+
+  // GET /api/notifications/count
+  app.get('/api/notifications/count', async () => {
+    return { unread: getUnreadNotificationCount() };
+  });
+
+  // PATCH /api/notifications/:id
+  app.patch<{ Params: { id: string }; Body: { read: boolean } }>(
+    '/api/notifications/:id',
+    async (req) => {
+      if (req.body.read) markNotificationRead(req.params.id);
+      return { success: true };
+    },
+  );
+
+  // POST /api/notifications/read-all
+  app.post('/api/notifications/read-all', async () => {
+    markAllNotificationsRead();
+    return { success: true };
+  });
+
+  // GET /api/notification-settings
+  app.get('/api/notification-settings', async () => {
+    return getNotificationSettings();
+  });
+
+  // PATCH /api/notification-settings/:channel
+  app.patch<{ Params: { channel: string }; Body: { enabled?: boolean; types_filter?: string[] | null; quiet_hours_start?: string | null; quiet_hours_end?: string | null } }>(
+    '/api/notification-settings/:channel',
+    async (req) => {
+      const fields: Record<string, unknown> = {};
+      if (req.body.enabled !== undefined) fields.enabled = req.body.enabled ? 1 : 0;
+      if (req.body.types_filter !== undefined) fields.types_filter = req.body.types_filter ? JSON.stringify(req.body.types_filter) : null;
+      if (req.body.quiet_hours_start !== undefined) fields.quiet_hours_start = req.body.quiet_hours_start;
+      if (req.body.quiet_hours_end !== undefined) fields.quiet_hours_end = req.body.quiet_hours_end;
+      updateNotificationSettings(req.params.channel, fields);
+      return { success: true };
+    },
+  );
 
   return app;
 }

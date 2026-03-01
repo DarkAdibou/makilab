@@ -15,6 +15,7 @@
 import type { SubAgent, SubAgentResult } from './types.ts';
 import {
   createTask,
+  updateTask,
   updateTaskStatus,
   getTask,
   listTasks,
@@ -109,6 +110,16 @@ export const tasksSubAgent: SubAgent = {
           cronPrompt: input['cron_prompt'] as string | undefined,
         });
         if (cronExpr) syncRecurringTasks();
+        // Auto-assign optimal model for recurring tasks
+        if (input['cron_expression'] && input['cron_prompt']) {
+          try {
+            const { classifyAndAssignModel } = await import('../llm/classify-task.ts');
+            const model = await classifyAndAssignModel(input['cron_prompt'] as string);
+            if (model) {
+              updateTask(id, { model });
+            }
+          } catch { /* classification is best-effort */ }
+        }
         logger.info({ taskId: id, title: input['title'], recurring: !!cronExpr }, 'Task created');
         const recurringInfo = cronExpr ? ` (récurrente: ${cronExpr})` : '';
         return {
