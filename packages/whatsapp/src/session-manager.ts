@@ -21,7 +21,8 @@
  * - auth_info_baileys/ must be in .gitignore (never commit credentials)
  */
 
-import makeWASocket, {
+import {
+  makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
@@ -29,6 +30,9 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
+import QRCode from 'qrcode';
+import { resolve } from 'node:path';
+import { exec } from 'node:child_process';
 import type { IncomingMessage, OutgoingMessage } from '@makilab/shared';
 
 export type MessageHandler = (msg: IncomingMessage) => Promise<OutgoingMessage>;
@@ -54,11 +58,14 @@ export class WhatsAppSessionManager {
 
   // sock exposed for sending messages from other parts of the app (e.g. Mission Control)
   private sock: ReturnType<typeof makeWASocket> | null = null;
+  // Dedup self-messaging (Baileys fires duplicate events)
+  private recentMessageIds = new Set<string>();
 
   constructor(
     private readonly allowedNumber: string,
     private readonly onMessage: MessageHandler,
     private readonly onStatus?: StatusHandler,
+    private readonly replyJid?: string,
   ) {}
 
   /** Current session state (read-only snapshot) */
@@ -109,6 +116,13 @@ export class WhatsAppSessionManager {
       if (qr) {
         console.log('\n📱 Scanne ce QR code avec ton numéro WhatsApp secondaire');
         console.log('   (Le QR expire dans 60 secondes)\n');
+        // Save QR as PNG and open it
+        const qrPath = resolve('whatsapp-qr.png');
+        await QRCode.toFile(qrPath, qr, { scale: 8 });
+        console.log(`📄 QR sauvegardé: ${qrPath}`);
+        // Auto-open on Windows/macOS/Linux
+        const cmd = process.platform === 'win32' ? `start "" "${qrPath}"` : process.platform === 'darwin' ? `open "${qrPath}"` : `xdg-open "${qrPath}"`;
+        exec(cmd, () => {});
       }
 
       if (connection === 'open') {
@@ -150,20 +164,30 @@ export class WhatsAppSessionManager {
 
       for (const msg of messages) {
         if (!msg.message) continue;
-        if (msg.key.fromMe) continue; // Ignore our own messages
+        // Baileys v6 LID: self-messages (to own number) have fromMe=true
+        // Skip only messages sent to other contacts
+        if (msg.key.fromMe && msg.key.remoteJid !== this.allowedNumber) continue;
+
+        // Dedup: Baileys fires duplicate events for self-messages
+        const msgId = msg.key.id ?? '';
+        if (this.recentMessageIds.has(msgId)) continue;
+        this.recentMessageIds.add(msgId);
+        if (this.recentMessageIds.size > 100) {
+          const first = this.recentMessageIds.values().next().value!;
+          this.recentMessageIds.delete(first);
+        }
 
         const from = msg.key.remoteJid ?? '';
 
         // SECURITY: strict whitelist — silently ignore unauthorized numbers
         if (from !== this.allowedNumber) {
           console.log(`🚫 Message ignoré — numéro non autorisé: ${from}`);
-          // TODO (E2): Log to activity_log with status 'denied'
           return;
         }
 
         const text =
-          msg.message.conversation ??
-          msg.message.extendedTextMessage?.text ??
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
           '';
 
         if (!text.trim()) continue;
@@ -182,12 +206,14 @@ export class WhatsAppSessionManager {
 
         try {
           const outgoing = await this.onMessage(incoming);
-          await this.sock!.sendMessage(outgoing.to, { text: outgoing.text });
+          // Use replyJid override for self-messaging (LID → JID resolution)
+          const sendTo = this.replyJid ?? outgoing.to;
+          await this.sock!.sendMessage(sendTo, { text: outgoing.text });
           console.log(`📤 Réponse envoyée (${outgoing.text.length} chars)`);
         } catch (err) {
           console.error('❌ Erreur traitement message:', err);
-          // Send error message to user — never let errors be silent
-          await this.sock!.sendMessage(from, {
+          const errorTo = this.replyJid ?? from;
+          await this.sock!.sendMessage(errorTo, {
             text: '❌ Une erreur est survenue. Réessaie dans un instant.',
           });
         }

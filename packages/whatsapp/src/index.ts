@@ -16,9 +16,11 @@ import type { IncomingMessage, OutgoingMessage } from '@makilab/shared';
 const allowedNumber = process.env['WHATSAPP_ALLOWED_NUMBER'];
 if (!allowedNumber) {
   console.error('❌ WHATSAPP_ALLOWED_NUMBER manquant dans .env');
-  console.error('   Format: 33XXXXXXXXX@s.whatsapp.net');
+  console.error('   Format: LID ou 33XXXXXXXXX@s.whatsapp.net');
   process.exit(1);
 }
+// Optional: force reply JID for self-messaging (LID doesn't deliver to self)
+const replyJid = process.env['WHATSAPP_REPLY_JID'];
 
 console.log('🤖 Makilab WhatsApp Gateway démarrage...');
 console.log(`🔒 Numéro autorisé: ${allowedNumber}`);
@@ -57,8 +59,10 @@ const manager = new WhatsAppSessionManager(
       banned: '❌',
     }[status];
     console.log(`${emoji} WhatsApp: ${status}`);
-    // TODO (E6): Push status to Mission Control via WebSocket
   },
+
+  // Reply JID override for self-messaging
+  replyJid,
 );
 
 await manager.start();
