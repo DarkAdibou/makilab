@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E6 terminé — Tâches + CRON ✅ — Prochaine étape : E7 Mission Control
+## Statut global : 🟢 E7 MVP terminé — Mission Control ✅ — Prochaine étape : E8 Gmail + Raycast
 
 ---
 
@@ -17,7 +17,7 @@
 | E4 | Subagents MVP (Obsidian, Gmail, Web, Karakeep) | 🔴 Critique | ✅ Terminé |
 | E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | ✅ Terminé |
-| E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | 🔲 Non démarré |
+| E7 | Mission Control — Chat + Command Center + Tasks + Logs | 🟠 Important | ✅ MVP Terminé |
 | E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré |
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | 🔲 Non démarré |
 | E10 | Mission Control — Vues contextuelles dynamiques | 🟡 Moyen terme | 🔲 Non démarré |
@@ -104,65 +104,43 @@ Plan détaillé : `docs/plans/2026-02-28-e6-tasks-cron.md`
 | L6.4 | CRON scheduler — briefing matin + résumé soir (node-cron) | ✅ |
 | L6.5 | 9 tests Vitest — CRUD tasks, steps, workflow structure | ✅ |
 
-## E7 — Mission Control
+## E7 — Mission Control MVP
+
+Design : `docs/plans/2026-03-01-e7-mission-control-design.md`
+Plan : `docs/plans/2026-03-01-e7-mission-control.md`
 
 | Story | Titre | Statut |
 |---|---|---|
-| L7.1 | Next.js 15 + design system + sidebar + Cmd+K | 🔲 |
-| L7.2 | Chat — bulles + panneau latéral live | 🔲 |
-| L7.3 | Command Center — activity feed + stat cards | 🔲 |
-| L7.4 | Tasks — vue tâches agentiques temps réel | 🔲 |
-| L7.5 | Logs — stream temps réel | 🔲 |
-| L7.6 | Connections — statut subagents + capabilities listing | 🔲 |
-| L7.7 | CRON — config + lancement manuel | 🔲 |
-| L7.8 | Settings — LLM Router + Subagents + Canaux + Sécurité | 🔲 |
+| L7.1 | Fastify API (health, subagents, messages, tasks, chat) — port 3100 | ✅ |
+| L7.2 | Next.js 15 + design system CSS + sidebar layout — port 3000 | ✅ |
+| L7.3 | Chat page — envoi messages + historique | ✅ |
+| L7.4 | Connections page — cards subagents + actions | ✅ |
+| L7.5 | CORS + server entrypoint + API proxy (rewrites) | ✅ |
+| — | Command Center, Tasks view, Logs, CRON UI, Settings | 🔲 E10+ |
 
 ---
 
 ## Dernière session
 
-**Date :** 2026-02-28
+**Date :** 2026-03-01
 **Accompli :**
-- E1 ✅ Foundation (monorepo, WhatsApp Gateway, agent loop)
-- E2 ✅ Mémoire T1 SQLite (node:sqlite builtin, facts, compaction)
-- E3 ✅ Architecture subagents (types, registre, routing via Anthropic tools)
-- E4 ✅ Subagents MVP — web ✅, karakeep ✅, obsidian ✅ (dual REST+file), gmail ✅ (squelette)
-- E5 ✅ Smart Capture — classify (Haiku) + route (Obsidian + Karakeep) + fix encodePath
-- E4.5 ✅ Hardening — Pino logger + validateConfig() + 17 tests Vitest
-- E6 ✅ Tâches + CRON — SQLite tasks/steps, SubAgent tasks, workflow runner, CRON scheduler
+- E7 ✅ Mission Control MVP — Fastify API (5 endpoints) + Next.js 15 dashboard (chat + connections)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:agent` : 7 subagents, logs Pino JSON, CRON disabled par défaut
-- `pnpm --filter @makilab/agent test` : 26 tests ✅ (17 hardening + 9 tasks)
-- 7 subagents : time, web, karakeep, obsidian, gmail, capture, **tasks**
+- `pnpm dev:api` : API Fastify port 3100 (health, subagents, messages, tasks, chat)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (chat + connections)
+- `pnpm --filter @makilab/agent test` : 30 tests ✅ (17 hardening + 9 tasks + 4 server)
+- 7 subagents : time, web, karakeep, obsidian, gmail, capture, tasks
 
-**E6 Tâches + CRON — Détails techniques :**
-- Tables SQLite : `tasks` (10 colonnes, 2 index) + `task_steps` (13 colonnes, 1 index)
-- CRUD : createTask, getTask, listTasks, updateTaskStatus, addTaskStep, updateTaskStep, getTaskSteps
-- SubAgent tasks : 4 actions (create, list, get, update) — accessible via Claude tool_use
-- `runner.ts` : exécute des WorkflowStep[] séquentiellement, persist chaque étape en SQLite
-- `cron.ts` : node-cron, 2 jobs (briefing matin 07:00, résumé soir 19:00), CRON_ENABLED=true pour activer
-- Config : `CRON_ENABLED`, `CRON_CHANNEL`, `CRON_BRIEFING_SCHEDULE`, `CRON_EVENING_SCHEDULE`
-
-**Notes techniques clés :**
-- `node:sqlite` builtin (Node 24) — pas de better-sqlite3, pas de compilation native
-- Subagents = Anthropic tools natifs (format `subagent__action` — ex: `tasks__create`)
-- `JsonSchemaProperty` union type (string/number/boolean/array/object) avec enum + default
-- `findSubAgent()` pour appels inter-subagents (pas d'import direct)
-- `validateConfig(log)` — pattern paramètre pour éviter circular dep
-- `encodePath(path)` — encode chaque segment URI séparément, préserve `/`
-
-**Variables .env configurées :**
-```
-OBSIDIAN_VAULT_PATH=d:/SynologyDrive/#Obsidian/obsidian-perso
-OBSIDIAN_REST_API_KEY=...
-BRAVE_SEARCH_API_KEY=    # à remplir
-KARAKEEP_API_KEY=         # à remplir
-GMAIL_ACCESS_TOKEN=       # à remplir à E8
-CRON_ENABLED=false        # true pour activer les CRON jobs
-CRON_CHANNEL=whatsapp     # ou cli
-```
+**E7 Mission Control — Détails techniques :**
+- `packages/agent/src/server.ts` — `buildServer()` async, Fastify + @fastify/cors
+- `packages/agent/src/start-server.ts` — entrypoint API (validateConfig + startCron + listen)
+- `packages/dashboard/` — Next.js 15 App Router, vanilla CSS dark mode (Apex-inspired)
+- API proxy via Next.js rewrites (`/api/*` → `localhost:3100/api/*`)
+- Design system : CSS vars light/dark, Inter + JetBrains Mono, sidebar 240px fixe
+- Chat : POST /api/chat → runAgentLoop() → réponse complète (pas de streaming)
+- Connections : GET /api/subagents → cards avec actions listées
 
 ---
 
@@ -183,7 +161,8 @@ Fichiers clés :
 - PROGRESS.md — état exact (source de vérité)
 - packages/agent/src/subagents/ — architecture subagents
 - packages/agent/src/memory/ — SQLite T1
+- packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅
-On reprend à : E7 — Mission Control (Next.js 15, design system Apex-inspired, chat, tasks, logs)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 MVP ✅
+On reprend à : E8 — Canal Gmail entrant + Raycast webhook
 ```
