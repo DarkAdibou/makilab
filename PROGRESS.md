@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E9 terminé — Mémoire sémantique Qdrant + Voyage AI ✅
+## Statut global : 🟢 E11 terminé — Code SubAgent (auto-modification + Git manager) ✅
 
 ---
 
@@ -21,7 +21,7 @@
 | E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré (après E13) |
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | ✅ Terminé |
 | E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
-| E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | 🔲 Non démarré |
+| E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | ✅ Terminé |
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Non démarré |
 | E13 | Subagents étendus (Indeed, NotebookLM, Calendar, Drive) | 🟢 Long terme | 🔲 Non démarré |
 | E14 | LLM Router intelligent configurable | 🟢 Long terme | 🔲 Non démarré |
@@ -164,28 +164,39 @@ Plan : `docs/plans/2026-03-01-e9-implementation.md`
 | L9.7 | Qdrant init at boot | ✅ |
 | L9.8 | System prompt guidance for memory subagent | ✅ |
 
+## E11 — Code SubAgent
+
+Design : `docs/plans/2026-03-01-e11-code-subagent-design.md`
+Plan : `docs/plans/2026-03-01-e11-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L11.1 | Config (CODE_REPO_ROOT, MAKILAB_ENV) + code-helpers (safePath, git utils) | ✅ |
+| L11.2 | Tests code-helpers (path safety, .env blocking) | ✅ |
+| L11.3 | SubAgent code — 11 actions (file ops, git, shell, restart) | ✅ |
+| L11.4 | Registration + tests sécurité (whitelist, branch safety) | ✅ |
+
 ---
 
 ## Dernière session
 
 **Date :** 2026-03-01
 **Accompli :**
-- E9 ✅ Mémoire sémantique (Qdrant + Voyage AI)
+- E11 ✅ Code SubAgent (auto-modification + Git manager)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (12 endpoints)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (6 pages)
-- `pnpm --filter @makilab/agent test` : 46 tests ✅ (17 hardening + 10 tasks + 8 server + 3 embeddings + 8 qdrant)
-- 9 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory (conditionnels)
+- `pnpm --filter @makilab/agent test` : 57 tests ✅ (17 hardening + 10 tasks + 8 server + 3 embeddings + 8 qdrant + 5 code-helpers + 6 code)
+- 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 
-**E9 — Détails techniques :**
-- Voyage AI `voyage-3` embeddings (1024 dim), free tier 200M tokens/mois
-- Qdrant Docker self-hosted, 2 collections : `conversations` + `knowledge`
-- SubAgent `memory` : search (sémantique cross-collection) + index (manuel)
-- Fire-and-forget : indexation conversations après chaque échange, summaries après compaction, facts après extraction
-- Score threshold 0.3, top 5 résultats par défaut
-- Conditionnel : QDRANT_URL + VOYAGE_API_KEY requis, sinon graceful skip
+**E11 — Détails techniques :**
+- SubAgent `code` : 11 actions (read_file, write_file, list_files, search_code, git_status, git_diff, git_branch, git_commit, git_push, run_check, restart_service)
+- Sécurité : écriture/commit bloqués hors branche agent/*, .env interdit, shell whitelisté (test/build/typecheck)
+- Restart dual mode : dev (kill port + spawn detached) / prod (docker compose restart)
+- Path sandboxing via safePath() — rejette traversal et fichiers sensibles
+- Toujours enregistré (pas conditionnel)
 
 ---
 
@@ -208,6 +219,6 @@ Fichiers clés :
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅
-Prochaine étape à décider (E8, E11, E12, E13, E14, E15)
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅
+Prochaine étape à décider (E8, E12, E13, E14, E15)
 ```
