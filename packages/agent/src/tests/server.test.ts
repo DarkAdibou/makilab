@@ -76,6 +76,16 @@ describe('Fastify server', () => {
     expect(res.json().status).toBe('in_progress');
   });
 
+  it('POST /api/chat/stream route exists (not 404)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/chat/stream',
+      payload: { message: 'test' },
+    });
+    // Route exists — may fail with API error but should NOT be 404
+    expect(res.statusCode).not.toBe(404);
+  });
+
   it('GET /api/stats returns dashboard statistics', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/stats' });
     expect(res.statusCode).toBe(200);

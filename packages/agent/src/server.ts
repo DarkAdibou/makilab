@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
 import { getRecentMessages, listTasks, createTask, getTask, updateTask, getStats } from './memory/sqlite.ts';
 import { runAgentLoop } from './agent-loop.ts';
+import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 
 export async function buildServer() {
   const app = Fastify({ logger: false });
@@ -98,6 +99,36 @@ export async function buildServer() {
     stats.subagentCount = getAllSubAgents().length;
     return stats;
   });
+
+  // POST /api/chat/stream — SSE streaming chat
+  app.post<{ Body: { message: string; channel?: string } }>(
+    '/api/chat/stream',
+    async (req, reply) => {
+      const { message, channel = 'mission_control' } = req.body;
+
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+
+      try {
+        const stream = runAgentLoopStreaming(message, {
+          channel: channel as 'mission_control',
+          from: 'mission_control',
+          history: [],
+        });
+
+        for await (const event of stream) {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+      } catch (err) {
+        reply.raw.write(`data: ${JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : String(err) })}\n\n`);
+      }
+
+      reply.raw.end();
+    },
+  );
 
   return app;
 }
