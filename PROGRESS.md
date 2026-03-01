@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E13 terminé — MCP Bridge + Tâches récurrentes ✅
+## Statut global : 🟢 E13.5 terminé — Dashboard Todo / Tâches récurrentes ✅
 
 ---
 
@@ -24,6 +24,7 @@
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | ✅ Terminé |
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Fusionné dans E6+E13 |
 | E13 | MCP Bridge + Tâches récurrentes | 🟠 Important | ✅ Terminé |
+| E13.5 | Dashboard : séparation Todo / Tâches récurrentes + exécution tracking | 🟠 Important | ✅ Terminé |
 | E14 | LLM Router intelligent + Cost Tracking (routing par tâche, métriques, dashboard coûts) | 🟠 Important | 🔲 Non démarré |
 | E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
@@ -197,32 +198,50 @@ Plan : `docs/plans/2026-03-01-e13-implementation.md`
 | L13.10 | Dashboard UI tâches récurrentes | ✅ |
 | L13.11 | PROGRESS.md update | ✅ |
 
+## E13.5 — Dashboard : séparation Todo / Tâches récurrentes
+
+Design : `docs/plans/2026-03-01-e13.5-todo-recurring-tasks-design.md`
+
+> ⚠️ Dépend de E13 ✅ — prêt à lancer
+
+| Story | Titre | Statut |
+|---|---|---|
+| L13.5.1 | Renommage sidebar (Tâches→Todo) + déplacement Kanban vers /todo | ✅ |
+| L13.5.2 | Table task_executions SQLite + migration + CRUD | ✅ |
+| L13.5.3 | API endpoints (GET exécutions, POST execute, stats enrichies) | ✅ |
+| L13.5.4 | Page Tâches récurrentes (vue tableau, fréquence, statut, coût) | ✅ |
+| L13.5.5 | Panneau détail récurrent (config éditable, timeline, stats) | ✅ |
+| L13.5.6 | Bouton "Exécuter maintenant" + feedback | ✅ |
+
 ---
 
 ## Dernière session
 
 **Date :** 2026-03-01
 **Accompli :**
-- E13 ✅ MCP Bridge + Tâches récurrentes (11 tâches, 10 commits)
+- E13 ✅ MCP Bridge + Tâches récurrentes (11 tâches)
+- E13.5 ✅ Dashboard Todo / Tâches récurrentes (6 stories + fixes)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (14 endpoints)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (6 pages)
+- `pnpm dev:api` : API Fastify port 3100 (17 endpoints)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (7 pages)
 - `pnpm --filter @makilab/agent test` : 65 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
-- MCP Bridge : `@modelcontextprotocol/sdk`, config-driven via `mcp-servers.json`, 3 serveurs (disabled)
-- Tâches récurrentes : CRON dynamique, création via chat + dashboard, toggle on/off
+- MCP Bridge : `@modelcontextprotocol/sdk`, config-driven via `mcp-servers.json`
+- Dashboard : /todo (Kanban) + /tasks (tableau récurrentes avec toggle, stats, exécutions)
 
-**E13 — Détails techniques :**
-- `mcp/bridge.ts` : connect/discover/call MCP servers, nommage `mcp_<server>__<tool>`
-- `mcp/config.ts` : loader `mcp-servers.json` (graceful si absent)
-- Transport stdio, pagination listTools, 60s timeout callTool
-- Agent loops : MCP tools dans buildToolList(), isMcpTool() routing avant subagents
-- Graceful shutdown via SIGINT/SIGTERM
-- SQLite migration : 3 colonnes (cron_expression, cron_enabled, cron_prompt)
-- `syncRecurringTasks()` : resync dynamique quand CRON fields changent
-- Dashboard : badge humanCron (français), toggle enable/disable, modal création avec presets
+**E13.5 — Détails techniques :**
+- Sidebar : OVERVIEW (Command Center, Activité) + MANAGE (Chat, Todo, Tâches, Connections)
+- /todo : Kanban existant, filtre `cron_enabled` tasks
+- /tasks : table récurrentes (fréquence, statut, next/last run, coût/mois, toggle switch)
+- Panneau détail : stats grid (4 métriques), config éditable (cron, prompt), timeline exécutions
+- Bouton "Exécuter maintenant" avec spinner feedback
+- `task_executions` table SQLite (duration, tokens, cost, result_summary, error)
+- API : GET /api/tasks/recurring (enrichi stats+nextRun), GET /api/tasks/:id/executions, POST /api/tasks/:id/execute
+- `cron-parser` v5 : `CronExpressionParser.parse()` (pas `parseExpression`)
+- Toggle switch CSS (`.toggle-switch` + `.toggle-slider`)
+- MCP status : GET /api/mcp/status, crash handling (transport.onclose/onerror)
 
 ---
 
@@ -245,6 +264,6 @@ Fichiers clés :
 - packages/agent/src/memory/ — SQLite T1 + Qdrant T2
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅ E13 ✅ E13.5 ✅
 Prochaine étape à décider (E8, E14, E15, E16, E17)
 ```

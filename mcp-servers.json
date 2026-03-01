@@ -7,16 +7,10 @@
     "env": {},
     "enabled": false
   },
-  "indeed": {
+  "mcp-test": {
     "command": "npx",
-    "args": ["-y", "@anthropic-ai/indeed-mcp"],
+    "args": ["-y", "@modelcontextprotocol/server-everything"],
     "env": {},
-    "enabled": false
-  },
-  "google-calendar": {
-    "command": "npx",
-    "args": ["-y", "@anthropic-ai/google-calendar-mcp"],
-    "env": {},
-    "enabled": false
+    "enabled": true
   }
 }
