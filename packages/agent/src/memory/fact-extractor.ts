@@ -51,12 +51,17 @@ export async function extractAndSaveFacts(
   userMessage: string,
   assistantReply: string,
   channel: string,
+  toolResults?: string[],
 ): Promise<void> {
   try {
     const existingFacts = getCoreMemory();
     const existingFactsStr = Object.entries(existingFacts)
       .map(([k, v]) => `${k}: ${v}`)
       .join('\n');
+
+    const toolContext = toolResults?.length
+      ? `\n\nRésultats d'outils consultés pendant cet échange :\n${toolResults.slice(0, 3).map(r => r.slice(0, 500)).join('\n---\n')}`
+      : '';
 
     const prompt = `${EXTRACTION_PROMPT}
 
@@ -65,7 +70,7 @@ ${existingFactsStr || '(aucun)'}
 
 Échange à analyser:
 USER: ${userMessage}
-AGENT: ${assistantReply}`;
+AGENT: ${assistantReply}${toolContext}`;
 
     const response = await llm.chat({
       taskType: 'fact_extraction',

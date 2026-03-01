@@ -270,7 +270,19 @@ export async function* runAgentLoopStreaming(
   saveMessage(channel, 'user', userMessage);
   saveMessage(channel, 'assistant', fullText);
 
-  extractAndSaveFacts(userMessage, fullText, channel).catch(() => {});
+  // Collect tool result texts from the conversation
+  const toolResultTexts = messages
+    .filter(m => m.role === 'user' && Array.isArray(m.content))
+    .flatMap(m => (m.content as Array<{ type: string; content?: string | Array<{ type: string; text?: string }> }>))
+    .filter(b => b.type === 'tool_result')
+    .map(b => {
+      if (typeof b.content === 'string') return b.content;
+      if (Array.isArray(b.content)) return b.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      return '';
+    })
+    .filter(Boolean);
+
+  extractAndSaveFacts(userMessage, fullText, channel, toolResultTexts).catch(() => {});
   indexConversation(channel, userMessage, fullText).catch(() => {});
 
   yield { type: 'done', fullText };
