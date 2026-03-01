@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E11 terminé — Code SubAgent (auto-modification + Git manager) ✅
+## Statut global : 🟡 E13 en cours — MCP Bridge + Tâches récurrentes (design + plan prêts, implémentation à lancer)
 
 ---
 
@@ -23,7 +23,7 @@
 | E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | ✅ Terminé |
 | E12 | Proactivité (briefing matin, surveillance) | 🟡 Moyen terme | 🔲 Fusionné dans E6+E13 |
-| E13 | Subagents étendus (Indeed, NotebookLM, Calendar, Drive) | 🟢 Long terme | 🔲 Non démarré |
+| E13 | MCP Bridge + Tâches récurrentes | 🟠 Important | 🟡 Design + Plan prêts |
 | E14 | LLM Router intelligent configurable | 🟢 Long terme | 🔲 Non démarré |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
 
@@ -176,6 +176,25 @@ Plan : `docs/plans/2026-03-01-e11-implementation.md`
 | L11.3 | SubAgent code — 11 actions (file ops, git, shell, restart) | ✅ |
 | L11.4 | Registration + tests sécurité (whitelist, branch safety) | ✅ |
 
+## E13 — MCP Bridge + Tâches récurrentes
+
+Design : `docs/plans/2026-03-01-e13-mcp-bridge-design.md`
+Plan : `docs/plans/2026-03-01-e13-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L13.1 | Install `@modelcontextprotocol/sdk` | 🔲 |
+| L13.2 | MCP config loader + `mcp-servers.json` | 🔲 |
+| L13.3 | MCP bridge core (connect, discover, call) | 🔲 |
+| L13.4 | Intégration boucle agentique + boot | 🔲 |
+| L13.5 | Tests MCP bridge | 🔲 |
+| L13.6 | SQLite migration (cron_expression, cron_enabled, cron_prompt) | 🔲 |
+| L13.7 | Dynamic CRON scheduler | 🔲 |
+| L13.8 | Enrichir subagent tasks (champs CRON) | 🔲 |
+| L13.9 | API endpoints tâches récurrentes | 🔲 |
+| L13.10 | Dashboard UI tâches récurrentes | 🔲 |
+| L13.11 | PROGRESS.md update | 🔲 |
+
 ---
 
 ## Dernière session
@@ -183,6 +202,9 @@ Plan : `docs/plans/2026-03-01-e11-implementation.md`
 **Date :** 2026-03-01
 **Accompli :**
 - E11 ✅ Code SubAgent (auto-modification + Git manager)
+- E13 design doc + plan d'implémentation (11 tâches) rédigés et commités
+- E12 fusionné dans E6+E13 (redondant)
+- Qdrant Docker lancé sur le desktop (http://localhost:6333)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
@@ -191,12 +213,12 @@ Plan : `docs/plans/2026-03-01-e11-implementation.md`
 - `pnpm --filter @makilab/agent test` : 57 tests ✅ (17 hardening + 10 tasks + 8 server + 3 embeddings + 8 qdrant + 5 code-helpers + 6 code)
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 
-**E11 — Détails techniques :**
-- SubAgent `code` : 11 actions (read_file, write_file, list_files, search_code, git_status, git_diff, git_branch, git_commit, git_push, run_check, restart_service)
-- Sécurité : écriture/commit bloqués hors branche agent/*, .env interdit, shell whitelisté (test/build/typecheck)
-- Restart dual mode : dev (kill port + spawn detached) / prod (docker compose restart)
-- Path sandboxing via safePath() — rejette traversal et fichiers sensibles
-- Toujours enregistré (pas conditionnel)
+**E13 — Prochaine étape :**
+- Plan détaillé dans `docs/plans/2026-03-01-e13-implementation.md` (11 tâches)
+- Partie 1 (tâches 1-5) : MCP Bridge — client MCP générique, config-driven, `@modelcontextprotocol/sdk`
+- Partie 2 (tâches 6-10) : Tâches récurrentes — migration SQLite, CRON dynamique, dashboard UI
+- 3 serveurs MCP cibles : NotebookLM, Indeed, Google Calendar
+- Transport stdio V1, nommage `mcp_<server>__<tool>`
 
 ---
 
@@ -220,5 +242,7 @@ Fichiers clés :
 - packages/dashboard/ — Next.js 15 Mission Control
 
 Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅ E9 ✅ E11 ✅
-Prochaine étape à décider (E8, E12, E13, E14, E15)
+Prochaine étape : E13 MCP Bridge + Tâches récurrentes (design + plan prêts, 11 tâches à implémenter)
+Plan : docs/plans/2026-03-01-e13-implementation.md
+Design : docs/plans/2026-03-01-e13-mcp-bridge-design.md
 ```
