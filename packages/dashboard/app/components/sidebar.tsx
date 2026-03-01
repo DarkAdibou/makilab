@@ -6,16 +6,17 @@ const SECTIONS = [
   {
     label: 'OVERVIEW',
     items: [
-      { href: '/', label: 'Command Center', icon: '🏠' },
-      { href: '/chat', label: 'Chat', icon: '💬' },
+      { href: '/', label: 'Command Center', icon: '\u{1F3E0}' },
       { href: '/activity', label: 'Activite', icon: '\u{1F4CA}' },
     ],
   },
   {
     label: 'MANAGE',
     items: [
-      { href: '/tasks', label: 'Taches', icon: '📋' },
-      { href: '/connections', label: 'Connections', icon: '🔌' },
+      { href: '/chat', label: 'Chat', icon: '\u{1F4AC}' },
+      { href: '/todo', label: 'Todo', icon: '\u{2705}' },
+      { href: '/tasks', label: 'Taches', icon: '\u{1F504}' },
+      { href: '/connections', label: 'Connections', icon: '\u{1F50C}' },
     ],
   },
 ];
