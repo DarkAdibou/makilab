@@ -37,6 +37,7 @@ function getDb(): DatabaseSync {
   if (!db) {
     db = new DatabaseSync(DB_PATH);
     db.exec('PRAGMA journal_mode = WAL'); // Better concurrent read performance
+    db.exec('PRAGMA busy_timeout = 5000'); // Wait up to 5s for locks
     db.exec('PRAGMA foreign_keys = ON');
     initSchema(db);
   }
@@ -147,6 +148,9 @@ function initSchema(db: DatabaseSync): void {
   migrateSeedAnthropicModels(db);
   migrateNotifications(db);
   migrateNotificationSettings(db);
+  migrateMemorySettings(db);
+  migrateMemoryRetrievals(db);
+  migrateFts5Messages(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -533,6 +537,81 @@ function migrateNotificationSettings(db: DatabaseSync): void {
   }
 
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_notification_settings')").run();
+}
+
+function migrateMemorySettings(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_memory_settings'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
+  const defaults: [string, string][] = [
+    ['auto_retrieve_enabled', 'true'],
+    ['auto_retrieve_max_results', '4'],
+    ['auto_retrieve_min_score', '0.5'],
+    ['obsidian_context_enabled', 'true'],
+    ['obsidian_context_notes', '[]'],
+    ['obsidian_context_tag', 'makilab'],
+  ];
+  const stmt = db.prepare('INSERT OR IGNORE INTO memory_settings (key, value) VALUES (?, ?)');
+  for (const [key, value] of defaults) {
+    stmt.run(key, value);
+  }
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_memory_settings')").run();
+}
+
+function migrateMemoryRetrievals(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_memory_retrievals'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_retrievals (
+      id TEXT PRIMARY KEY,
+      channel TEXT NOT NULL,
+      user_message_preview TEXT,
+      memories_injected INTEGER DEFAULT 0,
+      obsidian_notes_injected INTEGER DEFAULT 0,
+      total_tokens_added INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_memory_retrievals')").run();
+}
+
+function migrateFts5Messages(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_fts5_messages'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+      content,
+      content='messages',
+      content_rowid='rowid'
+    );
+    CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+      INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+      INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+    END;
+  `);
+
+  // Re-index existing messages
+  db.exec('INSERT INTO messages_fts(rowid, content) SELECT rowid, content FROM messages');
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_fts5_messages')").run();
 }
 
 // ============================================================
@@ -1306,4 +1385,99 @@ export function updateNotificationSettings(channel: string, fields: Partial<Omit
   sets.push("updated_at = datetime('now')");
   params.push(channel);
   getDb().prepare(`UPDATE notification_settings SET ${sets.join(', ')} WHERE channel = ?`).run(...params);
+}
+
+// ============================================================
+// Memory Settings (auto-retrieval config)
+// ============================================================
+
+export interface MemorySettings {
+  auto_retrieve_enabled: boolean;
+  auto_retrieve_max_results: number;
+  auto_retrieve_min_score: number;
+  obsidian_context_enabled: boolean;
+  obsidian_context_notes: string[];
+  obsidian_context_tag: string;
+}
+
+export function getMemorySettings(): MemorySettings {
+  const rows = getDb().prepare('SELECT key, value FROM memory_settings').all() as Array<{ key: string; value: string }>;
+  const map = new Map(rows.map(r => [r.key, r.value]));
+  return {
+    auto_retrieve_enabled: map.get('auto_retrieve_enabled') !== 'false',
+    auto_retrieve_max_results: parseInt(map.get('auto_retrieve_max_results') ?? '4', 10),
+    auto_retrieve_min_score: parseFloat(map.get('auto_retrieve_min_score') ?? '0.5'),
+    obsidian_context_enabled: map.get('obsidian_context_enabled') !== 'false',
+    obsidian_context_notes: JSON.parse(map.get('obsidian_context_notes') ?? '[]'),
+    obsidian_context_tag: map.get('obsidian_context_tag') ?? 'makilab',
+  };
+}
+
+export function updateMemorySettings(updates: Partial<MemorySettings>): void {
+  const db = getDb();
+  const stmt = db.prepare('INSERT OR REPLACE INTO memory_settings (key, value) VALUES (?, ?)');
+  for (const [key, value] of Object.entries(updates)) {
+    const dbValue = Array.isArray(value) ? JSON.stringify(value) : String(value);
+    stmt.run(key, dbValue);
+  }
+}
+
+// ============================================================
+// Memory Retrievals (auto-retrieval event log)
+// ============================================================
+
+export interface MemoryRetrievalRow {
+  id: string;
+  channel: string;
+  user_message_preview: string;
+  memories_injected: number;
+  obsidian_notes_injected: number;
+  total_tokens_added: number;
+  created_at: string;
+}
+
+export function logMemoryRetrieval(params: {
+  channel: string;
+  userMessagePreview: string;
+  memoriesInjected: number;
+  obsidianNotesInjected: number;
+  totalTokensAdded: number;
+}): void {
+  getDb().prepare(`
+    INSERT INTO memory_retrievals (id, channel, user_message_preview, memories_injected, obsidian_notes_injected, total_tokens_added)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    randomUUID(),
+    params.channel,
+    params.userMessagePreview,
+    params.memoriesInjected,
+    params.obsidianNotesInjected,
+    params.totalTokensAdded,
+  );
+}
+
+export function getMemoryRetrievals(limit = 20): MemoryRetrievalRow[] {
+  return [...getDb().prepare('SELECT * FROM memory_retrievals ORDER BY created_at DESC LIMIT ?').all(limit)] as unknown as MemoryRetrievalRow[];
+}
+
+// ============================================================
+// Messages Full-Text Search (FTS5)
+// ============================================================
+
+export interface MessageRow {
+  id: number;
+  channel: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export function searchMessagesFullText(query: string, limit = 20): MessageRow[] {
+  return [...getDb().prepare(`
+    SELECT m.* FROM messages_fts fts
+    JOIN messages m ON m.rowid = fts.rowid
+    WHERE messages_fts MATCH ?
+    ORDER BY rank
+    LIMIT ?
+  `).all(query, limit)] as unknown as MessageRow[];
 }
