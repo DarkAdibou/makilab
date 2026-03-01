@@ -139,6 +139,7 @@ function initSchema(db: DatabaseSync): void {
   repairTaskStepsFk(db);
   migrateTasksAddDescriptionTags(db);
   migrateTasksAddCronFields(db);
+  migrateTaskExecutions(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -319,6 +320,32 @@ function migrateTasksAddCronFields(db: DatabaseSync): void {
   db.exec('ALTER TABLE tasks ADD COLUMN cron_enabled INTEGER NOT NULL DEFAULT 0');
   db.exec('ALTER TABLE tasks ADD COLUMN cron_prompt TEXT');
   db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_cron_fields')").run();
+}
+
+/** Migration: create task_executions table for tracking recurring task runs */
+function migrateTaskExecutions(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_task_executions'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_executions (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id         TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'success',
+      duration_ms     INTEGER,
+      tokens_in       INTEGER,
+      tokens_out      INTEGER,
+      model           TEXT,
+      cost_estimate   REAL,
+      result_summary  TEXT,
+      error_message   TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id, created_at DESC);
+  `);
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_task_executions')").run();
 }
 
 // ============================================================
@@ -631,6 +658,113 @@ export function getUniqueTags(): string[] {
 export function listRecurringTasks(): TaskRow[] {
   const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_enabled = 1 ORDER BY created_at DESC');
   return [...stmt.all()] as unknown as TaskRow[];
+}
+
+/** List all tasks with cron_expression (enabled or not) */
+export function listAllRecurringTasks(): TaskRow[] {
+  const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_expression IS NOT NULL ORDER BY created_at DESC');
+  return [...stmt.all()] as unknown as TaskRow[];
+}
+
+// ============================================================
+// Task Executions (recurring task run history)
+// ============================================================
+
+export interface TaskExecutionRow {
+  id: number;
+  task_id: string;
+  status: string;
+  duration_ms: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  model: string | null;
+  cost_estimate: number | null;
+  result_summary: string | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+/** Log a task execution */
+export function logTaskExecution(params: {
+  taskId: string;
+  status: 'success' | 'error';
+  durationMs?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  model?: string;
+  costEstimate?: number;
+  resultSummary?: string;
+  errorMessage?: string;
+}): number {
+  const result = getDb().prepare(`
+    INSERT INTO task_executions (task_id, status, duration_ms, tokens_in, tokens_out, model, cost_estimate, result_summary, error_message)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.taskId,
+    params.status,
+    params.durationMs ?? null,
+    params.tokensIn ?? null,
+    params.tokensOut ?? null,
+    params.model ?? null,
+    params.costEstimate ?? null,
+    params.resultSummary ?? null,
+    params.errorMessage ?? null,
+  );
+  return result.lastInsertRowid as number;
+}
+
+/** List executions for a task */
+export function listTaskExecutions(taskId: string, limit = 20): TaskExecutionRow[] {
+  return getDb().prepare(
+    'SELECT * FROM task_executions WHERE task_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(taskId, limit) as unknown as TaskExecutionRow[];
+}
+
+/** Get execution stats for a task */
+export function getTaskExecutionStats(taskId: string): {
+  totalRuns: number;
+  successCount: number;
+  errorCount: number;
+  totalCost: number;
+  avgDurationMs: number;
+  lastRun: string | null;
+} {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) as total_runs,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+      SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count,
+      COALESCE(SUM(cost_estimate), 0) as total_cost,
+      COALESCE(AVG(duration_ms), 0) as avg_duration,
+      MAX(created_at) as last_run
+    FROM task_executions WHERE task_id = ?
+  `).get(taskId) as {
+    total_runs: number;
+    success_count: number;
+    error_count: number;
+    total_cost: number;
+    avg_duration: number;
+    last_run: string | null;
+  };
+  return {
+    totalRuns: row.total_runs,
+    successCount: row.success_count,
+    errorCount: row.error_count,
+    totalCost: row.total_cost,
+    avgDurationMs: row.avg_duration,
+    lastRun: row.last_run,
+  };
+}
+
+/** Get monthly cost for a task */
+export function getTaskMonthlyCost(taskId: string): number {
+  const row = getDb().prepare(`
+    SELECT COALESCE(SUM(cost_estimate), 0) as cost
+    FROM task_executions
+    WHERE task_id = ? AND created_at >= datetime('now', 'start of month')
+  `).get(taskId) as { cost: number };
+  return row.cost;
 }
 
 /** Get dashboard statistics */

@@ -19,7 +19,7 @@ import type { ScheduledTask } from 'node-cron';
 import { config } from '../config.ts';
 import { logger } from '../logger.ts';
 import { runAgentLoop } from '../agent-loop.ts';
-import { createTask, listRecurringTasks } from '../memory/sqlite.ts';
+import { createTask, listRecurringTasks, logTaskExecution } from '../memory/sqlite.ts';
 import { runWorkflow } from './runner.ts';
 import type { WorkflowStep } from './runner.ts';
 import type { Channel } from '@makilab/shared';
@@ -113,14 +113,27 @@ export function syncRecurringTasks(): void {
     try {
       const job = cron.schedule(task.cron_expression, async () => {
         logger.info({ taskId: task.id, title: task.title }, 'Running recurring task');
+        const start = Date.now();
         try {
           await runAgentLoop(task.cron_prompt!, {
             channel: (task.channel as Channel) ?? 'cli',
             from: 'cron',
             history: [],
           });
+          logTaskExecution({
+            taskId: task.id,
+            status: 'success',
+            durationMs: Date.now() - start,
+          });
         } catch (err) {
-          logger.error({ taskId: task.id, err: err instanceof Error ? err.message : String(err) }, 'Recurring task failed');
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error({ taskId: task.id, err: message }, 'Recurring task failed');
+          logTaskExecution({
+            taskId: task.id,
+            status: 'error',
+            durationMs: Date.now() - start,
+            errorMessage: message,
+          });
         }
       });
 
@@ -132,4 +145,28 @@ export function syncRecurringTasks(): void {
   }
 
   logger.info({ count: dynamicJobs.size }, 'Dynamic CRON jobs synced');
+}
+
+/** Execute a recurring task immediately (manual trigger) */
+export async function executeRecurringTask(task: { id: string; cron_prompt: string | null; channel: string }): Promise<{ success: boolean; durationMs: number; error?: string }> {
+  if (!task.cron_prompt) {
+    return { success: false, durationMs: 0, error: 'No cron_prompt defined' };
+  }
+
+  const start = Date.now();
+  try {
+    await runAgentLoop(task.cron_prompt, {
+      channel: (task.channel as Channel) ?? 'cli',
+      from: 'cron',
+      history: [],
+    });
+    const durationMs = Date.now() - start;
+    logTaskExecution({ taskId: task.id, status: 'success', durationMs });
+    return { success: true, durationMs };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const durationMs = Date.now() - start;
+    logTaskExecution({ taskId: task.id, status: 'error', durationMs, errorMessage: message });
+    return { success: false, durationMs, error: message };
+  }
 }
