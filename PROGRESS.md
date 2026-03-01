@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E10 terminé — Mission Control v2 ✅ — Prochaine étape : E8 Gmail + Raycast
+## Statut global : 🟢 E10.5 terminé — Kanban CRUD + Activity + Chat UX ✅ — Prochaine étape : E8 Gmail + Raycast
 
 ---
 
@@ -132,29 +132,43 @@ Plan : `docs/plans/2026-03-01-e10-implementation.md`
 | L10.6 | Chat streaming + markdown rendering (react-markdown) | ✅ |
 | L10.7 | SubAgent Home Assistant — list, state, service, assist | ✅ |
 
+## E10.5 — Kanban Improvements + Activity Log + Chat UX
+
+Design : `docs/plans/2026-03-01-e10.5-kanban-improvements-design.md`
+Plan : `docs/plans/2026-03-01-e10.5-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L10.5.1 | DB migration — description + tags sur tasks, table agent_events | ✅ |
+| L10.5.2 | API enrichi — CRUD tasks (description, tags, due_at), DELETE, GET tags, GET activity | ✅ |
+| L10.5.3 | Agent loop — instrumentation logAgentEvent + SSE enrichi (text_delta, args, result) | ✅ |
+| L10.5.4 | Kanban — TaskCard enrichi (tags, description, due_at) + FilterBar (search, tag, priorité) | ✅ |
+| L10.5.5 | TaskDetailPanel — panneau slide-in édition, tags avec autocomplete, suppression | ✅ |
+| L10.5.6 | NewTaskModal enrichi — description, tags, échéance | ✅ |
+| L10.5.7 | Page Activity — timeline events agent avec filtres et détails dépliables | ✅ |
+| L10.5.8 | Chat UX — streaming token par token + blocs tool calls dépliables | ✅ |
+
 ---
 
 ## Dernière session
 
 **Date :** 2026-03-01
 **Accompli :**
-- Fix Obsidian REST API (search GET→POST, headers nettoyés)
-- E10 ✅ Mission Control v2 — Kanban, streaming chat, command center, Home Assistant subagent
+- E10.5 ✅ Kanban CRUD + Activity Log + Chat UX amélioré
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (9 endpoints : health, subagents, messages, tasks, POST tasks, PATCH tasks/:id, stats, chat, chat/stream)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (5 pages : /, /chat, /tasks, /connections, /_not-found)
+- `pnpm dev:api` : API Fastify port 3100 (12 endpoints : health, subagents, messages, tasks/tags, tasks GET/POST/PATCH/DELETE, stats, activity, chat, chat/stream)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (6 pages : /, /activity, /chat, /tasks, /connections, /_not-found)
 - `pnpm --filter @makilab/agent test` : 35 tests ✅ (17 hardening + 10 tasks + 8 server)
 - 8 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant (conditionnel)
 
-**E10 Mission Control v2 — Détails techniques :**
-- Kanban : @dnd-kit/core + sortable, 4 colonnes (Backlog/Todo/In Progress/Done), drag-and-drop optimiste
-- Command Center : 4 stat cards, tâches en cours, activité récente
-- Chat streaming : SSE via POST /api/chat/stream, AsyncGenerator, react-markdown
-- Sidebar : sections OVERVIEW (Command Center, Chat) + MANAGE (Tasks, Connections)
-- Home Assistant : API REST HA directe, 4 actions (list_entities, get_state, call_service, assist)
-- Migration SQLite : table _migrations, backlog status ajouté aux tasks
+**E10.5 — Détails techniques :**
+- Kanban CRUD : description, tags JSON, due_at, FilterBar, TaskDetailPanel slide-in, DELETE avec confirmation
+- Tags : array JSON sur tasks, couleur par hash, autocomplétion depuis tags existants
+- Activity : table agent_events, logAgentEvent() dans agent loop, page /activity timeline
+- Chat UX : text_delta streaming token par token, tool_start avec args, tool_end avec result, blocs dépliables
+- Migration SQLite : ALTER TABLE tasks ADD description/tags, CREATE TABLE agent_events
 
 ---
 
@@ -177,6 +191,6 @@ Fichiers clés :
 - packages/agent/src/memory/ — SQLite T1
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅
+Statut : E1 ✅ E2 ✅ E3 ✅ E4 ✅ E5 ✅ E4.5 ✅ E6 ✅ E7 ✅ E10 ✅ E10.5 ✅
 On reprend à : E8 — Canal Gmail entrant + Raycast webhook
 ```
