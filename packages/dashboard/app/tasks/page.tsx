@@ -191,7 +191,7 @@ export default function RecurringTasksPage() {
                     {formatCost(task.stats.monthlyCost)}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                       <button
                         className="btn btn-ghost"
                         style={{ padding: '4px 8px', fontSize: '0.75rem' }}
@@ -203,14 +203,14 @@ export default function RecurringTasksPage() {
                           <span className="chat-tool-spinner" />
                         ) : '\u25B6\uFE0F'}
                       </button>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                        onClick={() => handleToggle(task)}
-                        title={task.cron_enabled ? 'Mettre en pause' : 'Activer'}
-                      >
-                        {task.cron_enabled ? '\u23F8\uFE0F' : '\u25B6'}
-                      </button>
+                      <label className="toggle-switch" title={task.cron_enabled ? 'Mettre en pause' : 'Activer'}>
+                        <input
+                          type="checkbox"
+                          checked={!!task.cron_enabled}
+                          onChange={() => handleToggle(task)}
+                        />
+                        <span className="toggle-slider" />
+                      </label>
                     </div>
                   </td>
                 </tr>
@@ -256,14 +256,17 @@ export default function RecurringTasksPage() {
               {/* Configuration */}
               <label className="detail-label">Configuration</label>
               <div className="detail-cron-section">
-                <label className="detail-cron-toggle">
-                  <input
-                    type="checkbox"
-                    checked={!!selectedTask.cron_enabled}
-                    onChange={() => handleToggle(selectedTask)}
-                  />
+                <div className="detail-cron-toggle">
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={!!selectedTask.cron_enabled}
+                      onChange={() => handleToggle(selectedTask)}
+                    />
+                    <span className="toggle-slider" />
+                  </label>
                   <span>{selectedTask.cron_enabled ? 'Active' : 'En pause'}</span>
-                </label>
+                </div>
 
                 <div className="detail-cron-info">
                   <span className="detail-label" style={{ marginTop: 0 }}>Expression CRON</span>

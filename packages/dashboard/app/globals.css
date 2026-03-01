@@ -503,6 +503,14 @@ body {
 .recurring-exec.error { border-color: color-mix(in srgb, var(--destructive) 30%, var(--border)); }
 .recurring-exec-header { display: flex; align-items: center; gap: 8px; }
 
+/* ─── Toggle switch ─── */
+.toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 20px; transition: background 0.2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; bottom: 2px; background: white; border-radius: 50%; transition: transform 0.2s; }
+.toggle-switch input:checked + .toggle-slider { background: #22c55e; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
 /* ─── Kanban ─── */
 .kanban-board { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; min-height: calc(100vh - 200px); }
 .kanban-column { flex: 1; min-width: 260px; max-width: 340px; background: var(--muted); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: background 0.15s; }
