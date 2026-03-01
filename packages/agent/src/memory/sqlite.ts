@@ -455,11 +455,13 @@ export function createTask(params: {
   context?: Record<string, unknown>;
   dueAt?: string;
   cronId?: string;
+  description?: string;
+  tags?: string[];
 }): string {
   const id = randomUUID();
   getDb().prepare(`
-    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id, description, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.title,
@@ -469,6 +471,8 @@ export function createTask(params: {
     JSON.stringify(params.context ?? {}),
     params.dueAt ?? null,
     params.cronId ?? null,
+    params.description ?? '',
+    JSON.stringify(params.tags ?? []),
   );
   return id;
 }
@@ -485,12 +489,15 @@ export function getTask(id: string): TaskRow | null {
   return getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as unknown as TaskRow | null;
 }
 
-/** List tasks — filtered by status (optional) */
-export function listTasks(filter?: { status?: string; channel?: string; limit?: number }): TaskRow[] {
+/** List tasks — filtered by status, tag, priority, search (optional) */
+export function listTasks(filter?: { status?: string; channel?: string; limit?: number; tag?: string; priority?: string; search?: string }): TaskRow[] {
   let sql = 'SELECT * FROM tasks WHERE 1=1';
   const params: (string | number)[] = [];
   if (filter?.status) { sql += ' AND status = ?'; params.push(filter.status); }
   if (filter?.channel) { sql += ' AND channel = ?'; params.push(filter.channel); }
+  if (filter?.priority) { sql += ' AND priority = ?'; params.push(filter.priority); }
+  if (filter?.tag) { sql += " AND tags LIKE '%' || ? || '%'"; params.push(`"${filter.tag}"`); }
+  if (filter?.search) { sql += " AND (title LIKE '%' || ? || '%' OR description LIKE '%' || ? || '%')"; params.push(filter.search, filter.search); }
   sql += ' ORDER BY created_at DESC LIMIT ?';
   params.push(filter?.limit ?? 20);
   return getDb().prepare(sql).all(...params) as unknown as TaskRow[];
@@ -540,17 +547,39 @@ export function updateTaskStep(stepId: number, update: {
 }
 
 /** Update a task's fields (partial update) */
-export function updateTask(id: string, fields: { status?: string; title?: string; priority?: string }): TaskRow | null {
+export function updateTask(id: string, fields: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null }): TaskRow | null {
   const sets: string[] = [];
-  const params: string[] = [];
+  const params: (string | null)[] = [];
   if (fields.status) { sets.push('status = ?'); params.push(fields.status); }
   if (fields.title) { sets.push('title = ?'); params.push(fields.title); }
   if (fields.priority) { sets.push('priority = ?'); params.push(fields.priority); }
+  if (fields.description !== undefined) { sets.push('description = ?'); params.push(fields.description); }
+  if (fields.tags !== undefined) { sets.push('tags = ?'); params.push(JSON.stringify(fields.tags)); }
+  if (fields.due_at !== undefined) { sets.push('due_at = ?'); params.push(fields.due_at); }
   if (sets.length === 0) return getTask(id);
   sets.push("updated_at = datetime('now')");
   params.push(id);
   getDb().prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   return getTask(id);
+}
+
+/** Delete a task by ID */
+export function deleteTask(id: string): boolean {
+  const result = getDb().prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
+/** Get all unique tags across tasks */
+export function getUniqueTags(): string[] {
+  const rows = getDb().prepare("SELECT DISTINCT tags FROM tasks WHERE tags != '[]'").all() as unknown as { tags: string }[];
+  const tagSet = new Set<string>();
+  for (const row of rows) {
+    try {
+      const parsed = JSON.parse(row.tags) as string[];
+      for (const t of parsed) tagSet.add(t);
+    } catch { /* skip */ }
+  }
+  return [...tagSet].sort();
 }
 
 /** Get dashboard statistics */

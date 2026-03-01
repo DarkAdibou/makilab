@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, getStats } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents } from './memory/sqlite.ts';
 import { runAgentLoop } from './agent-loop.ts';
 import { runAgentLoopStreaming } from './agent-loop-stream.ts';
 
@@ -38,13 +38,18 @@ export async function buildServer() {
     },
   );
 
+  // GET /api/tasks/tags — must be before /api/tasks to avoid :id match
+  app.get('/api/tasks/tags', async () => {
+    return getUniqueTags();
+  });
+
   // GET /api/tasks
-  app.get<{ Querystring: { status?: string; limit?: string } }>(
+  app.get<{ Querystring: { status?: string; limit?: string; tag?: string; priority?: string; search?: string } }>(
     '/api/tasks',
     async (req) => {
-      const status = req.query.status;
-      const limit = parseInt(req.query.limit ?? '10', 10);
-      return listTasks({ status, limit });
+      const { status, limit: limitStr, tag, priority, search } = req.query;
+      const limit = parseInt(limitStr ?? '100', 10);
+      return listTasks({ status, limit, tag, priority, search });
     },
   );
 
@@ -64,15 +69,18 @@ export async function buildServer() {
   );
 
   // POST /api/tasks — create a task from the dashboard
-  app.post<{ Body: { title: string; priority?: string; status?: string } }>(
+  app.post<{ Body: { title: string; priority?: string; status?: string; description?: string; tags?: string[]; due_at?: string } }>(
     '/api/tasks',
     async (req, reply) => {
-      const { title, priority, status } = req.body;
+      const { title, priority, status, description, tags, due_at } = req.body;
       const id = createTask({
         title,
         createdBy: 'user',
         channel: 'mission_control',
         priority: priority as 'low' | 'medium' | 'high' | undefined,
+        description,
+        tags,
+        dueAt: due_at,
       });
       if (status && status !== 'pending') {
         updateTask(id, { status });
@@ -83,7 +91,7 @@ export async function buildServer() {
   );
 
   // PATCH /api/tasks/:id — update task fields
-  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string } }>(
+  app.patch<{ Params: { id: string }; Body: { status?: string; title?: string; priority?: string; description?: string; tags?: string[]; due_at?: string | null } }>(
     '/api/tasks/:id',
     async (req, reply) => {
       const existing = getTask(req.params.id);
@@ -93,12 +101,32 @@ export async function buildServer() {
     },
   );
 
+  // DELETE /api/tasks/:id
+  app.delete<{ Params: { id: string } }>(
+    '/api/tasks/:id',
+    async (req, reply) => {
+      const deleted = deleteTask(req.params.id);
+      if (!deleted) return reply.status(404).send({ error: 'Task not found' });
+      return { success: true };
+    },
+  );
+
   // GET /api/stats — dashboard statistics
   app.get('/api/stats', async () => {
     const stats = getStats();
     stats.subagentCount = getAllSubAgents().length;
     return stats;
   });
+
+  // GET /api/activity — agent event log
+  app.get<{ Querystring: { limit?: string; type?: string; channel?: string } }>(
+    '/api/activity',
+    async (req) => {
+      const { limit: limitStr, type, channel } = req.query;
+      const limit = parseInt(limitStr ?? '100', 10);
+      return listAgentEvents({ type, channel, limit });
+    },
+  );
 
   // POST /api/chat/stream — SSE streaming chat
   app.post<{ Body: { message: string; channel?: string } }>(

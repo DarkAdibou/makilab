@@ -16,6 +16,7 @@ import {
   loadMemoryContext,
   buildMemoryPrompt,
   saveMessage,
+  logAgentEvent,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { logger } from './logger.ts';
@@ -64,9 +65,9 @@ function buildToolList(): Anthropic.Tool[] {
 }
 
 export type StreamEvent =
-  | { type: 'text'; content: string }
-  | { type: 'tool_start'; name: string }
-  | { type: 'tool_end'; name: string; success: boolean }
+  | { type: 'text_delta'; content: string }
+  | { type: 'tool_start'; name: string; args?: Record<string, unknown> }
+  | { type: 'tool_end'; name: string; success: boolean; result?: string }
   | { type: 'done'; fullText: string }
   | { type: 'error'; message: string };
 
@@ -118,19 +119,11 @@ export async function* runAgentLoopStreaming(
         messages,
       });
 
-      // Track tool names by content block index for tool_start events
-      const toolNames = new Map<number, string>();
-
       for await (const event of stream) {
-        if (event.type === 'content_block_start') {
-          if (event.content_block.type === 'tool_use') {
-            toolNames.set(event.index, event.content_block.name);
-            yield { type: 'tool_start', name: event.content_block.name };
-          }
-        } else if (event.type === 'content_block_delta') {
+        if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {
             fullText += event.delta.text;
-            yield { type: 'text', content: event.delta.text };
+            yield { type: 'text_delta', content: event.delta.text };
           }
         }
       }
@@ -149,14 +142,26 @@ export async function* runAgentLoopStreaming(
         for (const block of finalMessage.content) {
           if (block.type !== 'tool_use') continue;
 
+          const startTime = Date.now();
           let resultContent: string;
           let success = true;
 
-          if (block.name.includes(SUBAGENT_SEP)) {
-            const [subagentName, ...actionParts] = block.name.split(SUBAGENT_SEP);
-            const actionName = actionParts.join(SUBAGENT_SEP);
-            const subagent = findSubAgent(subagentName ?? '');
+          const isSubagent = block.name.includes(SUBAGENT_SEP);
+          const [subagentName, ...actionParts] = isSubagent ? block.name.split(SUBAGENT_SEP) : [undefined];
+          const actionName = isSubagent ? actionParts.join(SUBAGENT_SEP) : block.name;
 
+          yield { type: 'tool_start', name: block.name, args: block.input as Record<string, unknown> };
+
+          logAgentEvent({
+            type: 'tool_call',
+            channel,
+            subagent: subagentName,
+            action: actionName,
+            input: block.input,
+          });
+
+          if (isSubagent) {
+            const subagent = findSubAgent(subagentName ?? '');
             if (!subagent) {
               resultContent = `Erreur : subagent "${subagentName}" introuvable`;
               success = false;
@@ -187,7 +192,19 @@ export async function* runAgentLoopStreaming(
             }
           }
 
-          yield { type: 'tool_end', name: block.name, success };
+          const durationMs = Date.now() - startTime;
+
+          logAgentEvent({
+            type: 'tool_result',
+            channel,
+            subagent: subagentName,
+            action: actionName,
+            output: resultContent.slice(0, 500),
+            success,
+            durationMs,
+          });
+
+          yield { type: 'tool_end', name: block.name, success, result: resultContent.slice(0, 200) };
 
           toolResults.push({
             type: 'tool_result',
