@@ -31,6 +31,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { config } from '../config.ts';
+import { logger } from '../logger.ts';
 
 // HTTPS port 27124 (default) — the plugin uses a self-signed certificate
 const OBSIDIAN_BASE = 'https://127.0.0.1:27124';
@@ -47,8 +48,9 @@ async function obsidianFetch(url: string, init?: RequestInit): Promise<Response>
   return fetch(url, init);
 }
 
-function obsidianHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+function obsidianHeaders(contentType?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (contentType) headers['Content-Type'] = contentType;
   if (config.obsidianRestApiKey) {
     headers['Authorization'] = `Bearer ${config.obsidianRestApiKey}`;
   }
@@ -62,8 +64,10 @@ async function isObsidianLive(): Promise<boolean> {
       headers: obsidianHeaders(),
       signal: AbortSignal.timeout(2000),
     });
+    logger.info({ status: r.status, ok: r.ok }, 'Obsidian REST API health check');
     return r.ok;
-  } catch {
+  } catch (err) {
+    logger.warn({ error: err instanceof Error ? err.message : String(err) }, 'Obsidian REST API unreachable — using file fallback');
     return false;
   }
 }
@@ -199,28 +203,33 @@ async function apiReadNote(path: string): Promise<SubAgentResult> {
 }
 
 async function apiCreateNote(path: string, content: string): Promise<SubAgentResult> {
-  const r = await obsidianFetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`, {
-    method: 'PUT', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: content,
+  const url = `${OBSIDIAN_BASE}/vault/${encodePath(path)}`;
+  logger.info({ url, method: 'PUT', contentLength: content.length }, 'Obsidian API: creating note');
+  const r = await obsidianFetch(url, {
+    method: 'PUT', headers: obsidianHeaders('text/markdown'), body: content,
   });
+  logger.info({ status: r.status, ok: r.ok }, 'Obsidian API: create response');
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Note créée: ${path}`, data: { path, source: 'api' } };
 }
 
 async function apiAppendNote(path: string, content: string): Promise<SubAgentResult> {
   const r = await obsidianFetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`, {
-    method: 'POST', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: '\n' + content,
+    method: 'POST', headers: obsidianHeaders('text/markdown'), body: '\n' + content,
   });
   if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
   return { success: true, text: `Contenu ajouté à: ${path}`, data: { path, source: 'api' } };
 }
 
 async function apiSearchVault(query: string, limit: number): Promise<SubAgentResult> {
-  const r = await obsidianFetch(
-    `${OBSIDIAN_BASE}/search/simple/?query=${encodeURIComponent(query)}&contextLength=150`,
-    { headers: obsidianHeaders() },
-  );
+  const url = `${OBSIDIAN_BASE}/search/simple/?query=${encodeURIComponent(query)}&contextLength=150`;
+  logger.info({ url, query }, 'Obsidian API: searching vault');
+  const r = await obsidianFetch(url, {
+    method: 'POST',
+    headers: obsidianHeaders(),
+  });
   if (!r.ok) throw new Error(`Obsidian search API ${r.status}`);
-  const results = await r.json() as Array<{ filename: string; matches?: Array<{ context: string }> }>;
+  const results = await r.json() as Array<{ filename: string; matches?: Array<{ match: { start: number; end: number }; context: string }> }>;
   const trimmed = results.slice(0, limit);
   if (trimmed.length === 0) return { success: true, text: `Aucune note trouvée pour: "${query}"`, data: [] };
   const formatted = trimmed.map((r, i) =>
@@ -242,7 +251,7 @@ async function apiDailyNote(action: string, content?: string): Promise<SubAgentR
   }
   if (action === 'append' && content) {
     const r = await obsidianFetch(`${OBSIDIAN_BASE}/periodic/daily/`, {
-      method: 'POST', headers: { ...obsidianHeaders(), 'Content-Type': 'text/markdown' }, body: '\n' + content,
+      method: 'POST', headers: obsidianHeaders('text/markdown'), body: '\n' + content,
     });
     if (!r.ok) throw new Error(`Obsidian daily append ${r.status}`);
     return { success: true, text: 'Ajouté au journal du jour', data: {} };
