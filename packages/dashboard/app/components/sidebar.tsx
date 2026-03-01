@@ -2,9 +2,21 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const NAV = [
-  { href: '/', label: 'Chat', icon: '💬' },
-  { href: '/connections', label: 'Connections', icon: '🔌' },
+const SECTIONS = [
+  {
+    label: 'OVERVIEW',
+    items: [
+      { href: '/', label: 'Command Center', icon: '🏠' },
+      { href: '/chat', label: 'Chat', icon: '💬' },
+    ],
+  },
+  {
+    label: 'MANAGE',
+    items: [
+      { href: '/tasks', label: 'Taches', icon: '📋' },
+      { href: '/connections', label: 'Connections', icon: '🔌' },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -15,16 +27,20 @@ export function Sidebar() {
         <span className="sidebar-logo-text">Makilab</span>
       </div>
       <nav className="sidebar-nav">
-        <span className="sidebar-section">NAVIGATION</span>
-        {NAV.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`sidebar-link ${pathname === item.href ? 'active' : ''}`}
-          >
-            <span className="sidebar-icon">{item.icon}</span>
-            {item.label}
-          </Link>
+        {SECTIONS.map((section) => (
+          <div key={section.label} className="sidebar-section">
+            <span className="sidebar-section-label">{section.label}</span>
+            {section.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`sidebar-link ${pathname === item.href ? 'active' : ''}`}
+              >
+                <span className="sidebar-icon">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </div>
         ))}
       </nav>
     </aside>
