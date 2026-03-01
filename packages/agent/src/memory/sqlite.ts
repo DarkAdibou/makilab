@@ -140,6 +140,7 @@ function initSchema(db: DatabaseSync): void {
   migrateTasksAddDescriptionTags(db);
   migrateTasksAddCronFields(db);
   migrateTaskExecutions(db);
+  migrateLlmUsage(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -346,6 +347,31 @@ function migrateTaskExecutions(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions(task_id, created_at DESC);
   `);
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_task_executions')").run();
+}
+
+function migrateLlmUsage(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_llm_usage'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_usage (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider    TEXT NOT NULL,
+      model       TEXT NOT NULL,
+      task_type   TEXT NOT NULL,
+      channel     TEXT,
+      tokens_in   INTEGER NOT NULL,
+      tokens_out  INTEGER NOT NULL,
+      cost_usd    REAL NOT NULL,
+      duration_ms INTEGER,
+      task_id     TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at DESC);
+  `);
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_usage')").run();
 }
 
 // ============================================================
@@ -880,4 +906,100 @@ export function buildMemoryPrompt(ctx: MemoryContext): string {
   }
 
   return parts.join('\n\n');
+}
+
+// ============================================================
+// LLM Usage Tracking
+// ============================================================
+
+export interface LlmUsageRow {
+  id: number;
+  provider: string;
+  model: string;
+  task_type: string;
+  channel: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  duration_ms: number | null;
+  task_id: string | null;
+  created_at: string;
+}
+
+export function logLlmUsage(params: {
+  provider: string;
+  model: string;
+  taskType: string;
+  channel?: string;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  durationMs?: number;
+  taskId?: string;
+}): number {
+  const result = getDb().prepare(`
+    INSERT INTO llm_usage (provider, model, task_type, channel, tokens_in, tokens_out, cost_usd, duration_ms, task_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    params.provider, params.model, params.taskType,
+    params.channel ?? null, params.tokensIn, params.tokensOut,
+    params.costUsd, params.durationMs ?? null, params.taskId ?? null,
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function getRecentLlmUsage(limit = 50): LlmUsageRow[] {
+  return getDb().prepare(
+    'SELECT * FROM llm_usage ORDER BY created_at DESC LIMIT ?'
+  ).all(limit) as unknown as LlmUsageRow[];
+}
+
+export function getLlmUsageSummary(period: 'day' | 'week' | 'month' | 'year'): {
+  totalCost: number;
+  totalCalls: number;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  byModel: Array<{ model: string; cost: number; calls: number }>;
+  byTaskType: Array<{ taskType: string; cost: number; calls: number }>;
+} {
+  const sinceMap = { day: '-1 day', week: '-7 days', month: 'start of month', year: 'start of year' };
+  const since = sinceMap[period];
+  const db = getDb();
+
+  const totals = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) as total_cost,
+           COUNT(*) as total_calls,
+           COALESCE(SUM(tokens_in), 0) as total_tokens_in,
+           COALESCE(SUM(tokens_out), 0) as total_tokens_out
+    FROM llm_usage WHERE created_at >= datetime('now', ?)
+  `).get(since) as { total_cost: number; total_calls: number; total_tokens_in: number; total_tokens_out: number };
+
+  const byModel = db.prepare(`
+    SELECT model, COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls
+    FROM llm_usage WHERE created_at >= datetime('now', ?)
+    GROUP BY model ORDER BY cost DESC
+  `).all(since) as unknown as Array<{ model: string; cost: number; calls: number }>;
+
+  const byTaskType = db.prepare(`
+    SELECT task_type as taskType, COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls
+    FROM llm_usage WHERE created_at >= datetime('now', ?)
+    GROUP BY task_type ORDER BY cost DESC
+  `).all(since) as unknown as Array<{ taskType: string; cost: number; calls: number }>;
+
+  return {
+    totalCost: totals.total_cost,
+    totalCalls: totals.total_calls,
+    totalTokensIn: totals.total_tokens_in,
+    totalTokensOut: totals.total_tokens_out,
+    byModel,
+    byTaskType,
+  };
+}
+
+export function getLlmUsageHistory(days = 30): Array<{ date: string; cost: number; calls: number }> {
+  return getDb().prepare(`
+    SELECT DATE(created_at) as date, COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls
+    FROM llm_usage WHERE created_at >= datetime('now', ?)
+    GROUP BY DATE(created_at) ORDER BY date ASC
+  `).all(`-${days} days`) as unknown as Array<{ date: string; cost: number; calls: number }>;
 }
