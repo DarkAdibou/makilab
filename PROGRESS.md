@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E14.5 terminé — Smart Model Catalog + Notifications ✅
+## Statut global : 🟢 E16 terminé — Mémoire hybride unifiée ✅
 
 ---
 
@@ -26,7 +26,7 @@
 | E13 | MCP Bridge + Tâches récurrentes | 🟠 Important | ✅ Terminé |
 | E13.5 | Dashboard : séparation Todo / Tâches récurrentes + exécution tracking | 🟠 Important | ✅ Terminé |
 | E14 | LLM Router intelligent + Cost Tracking (routing par tâche, métriques, dashboard coûts) | 🟠 Important | ✅ Terminé |
-| E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | 🔲 Non démarré |
+| E16 | Mémoire hybride unifiée (retrieval multi-source + extraction auto de faits) | 🟡 Moyen terme | ✅ Terminé |
 | E17 | Mission Control WebSocket (temps réel bidirectionnel) | 🟡 Moyen terme | 🔲 Non démarré |
 | E18 | SearXNG — self-hosted search (remplace Brave primary) | 🟠 Important | ✅ Terminé |
 | E14.5 | Smart Model Catalog + Notifications (catalogue OpenRouter dynamique, moteur notifs) | 🟠 Important | ✅ Terminé |
@@ -281,41 +281,59 @@ Plan : `docs/plans/2026-03-01-e14.5-implementation.md`
 | L14.5.11 | Page /settings/notifications — toggles canaux, types, quiet hours | ✅ |
 | L14.5.12 | Cost emitter + seed briefing hebdo récurrent | ✅ |
 
+## E16 — Mémoire hybride unifiée
+
+Design : `docs/plans/2026-03-02-e16-unified-memory-design.md`
+Plan : `docs/plans/2026-03-02-e16-implementation.md`
+
+| Story | Titre | Statut |
+|---|---|---|
+| L16.1 | SQLite migrations — memory_settings, memory_retrievals, FTS5 messages | ✅ |
+| L16.2 | Auto-retriever module — Qdrant semantic + Obsidian context | ✅ |
+| L16.3 | Intégration auto-retrieval dans agent loops (sync + stream) | ✅ |
+| L16.4 | Enrichissement extraction de faits (tool results) | ✅ |
+| L16.5 | SubAgent memory — forget + search_text actions | ✅ |
+| L16.6 | API endpoints mémoire (facts, search, settings, stats, retrievals) | ✅ |
+| L16.7 | Dashboard /memory — faits, recherche, settings, stats | ✅ |
+
 ---
 
 ## Dernière session
 
-**Date :** 2026-03-01 (session 4)
+**Date :** 2026-03-02 (session 5)
 **Accompli :**
-- E14.5 terminé — Smart Model Catalog + Notifications (12 stories)
-- Catalogue OpenRouter dynamique (342+ modèles, refresh quotidien CRON 3h)
-- Moteur de notifications multi-canal (mission_control, whatsapp, email)
-- Classification LLM automatique des tâches pour assignation modèle optimal
-- Dashboard : /models, /costs refonte, /settings/notifications, NotificationBell
-- Cost emitter + briefing hebdo récurrent auto-seedé
+- E16 terminé — Mémoire hybride unifiée (7 stories)
+- Auto-retrieval Qdrant : embed message → search sémantique → injection system prompt (max 4 résultats, score > 0.5)
+- Obsidian comme moteur de contexte : notes fixes configurables + tag #makilab dynamique
+- FTS5 full-text search sur messages SQLite (triggers auto-sync)
+- Extraction de faits enrichie (tool results en plus des messages)
+- SubAgent memory étendu : forget (suppression Qdrant + facts) + search_text (FTS5)
+- Dashboard /memory : stats, éditeur de faits, recherche hybride (sémantique/texte), settings configurables
+- 8 API endpoints mémoire + logs de retrieval observables
+- Fix pages /costs et /models (savingsPercent null)
+- Nettoyage kanban (20 tâches test supprimées)
 
-**E14.5 détails :**
-- 4 tables SQLite : llm_models, llm_route_config, notifications, notification_settings
-- 15 fonctions CRUD + 3 interfaces dans sqlite.ts
-- catalog.ts : fetch OpenRouter, scoring `1/(price+0.01)*bonus`, suggestions >5% savings
-- classify-task.ts : appel LLM (Haiku) → complexity/sensitive/needsTools → modèle optimal
-- engine.ts : store + dispatch, quiet hours (overnight 22-08), type filtering par canal
-- cost-emitter.ts : détection savings ≥30% → notification
-- 12 nouveaux endpoints API (catalog, routes, suggestions, notifications, settings)
-- Seed Anthropic models séparément (IDs différents d'OpenRouter)
-- Tâche récurrente "Briefing hebdo coûts LLM" seedée au boot (lundi 8h)
+**E16 détails :**
+- 3 migrations SQLite : memory_settings (key/value), memory_retrievals (logs), messages_fts (FTS5 virtual table)
+- retriever.ts : autoRetrieve() + buildRetrievalPrompt() + fetchObsidianContextNotes()
+- Agent loops (sync + stream) : auto-retrieval injecté dans system prompt
+- fact-extractor.ts : paramètre toolResults pour enrichir l'extraction
+- qdrant.ts : SearchResult enrichi (id + collection) + deleteByIds()
+- memory subagent : 4 actions (search, index, forget, search_text)
+- Dashboard /memory : 4 sections (stats, facts editor, search, settings avec toggles/sliders)
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
-- `pnpm dev:api` : API Fastify port 3100 (35+ endpoints)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (12 pages)
-- `pnpm --filter @makilab/agent test` : 99 tests ✅
+- `pnpm dev:api` : API Fastify port 3100 (40+ endpoints)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (13 pages)
+- `pnpm --filter @makilab/agent test` : 118 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 
 **Prochaines étapes :**
-- E16 — Mémoire hybride unifiée
 - E8 — Canal Gmail entrant + Raycast webhook
+- E17 — Mission Control WebSocket (temps réel)
 - Kanban UX polish — datepicker, autocomplétion tags, thème dark/clair
+- Centralisation OpenRouter (user preference)
 
 ---
 
@@ -340,6 +358,6 @@ Fichiers clés :
 - packages/agent/src/whatsapp/ — WhatsApp Baileys gateway (unifié dans Fastify)
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1-E7 ✅ E9-E11 ✅ E13-E14.5 ✅ E18-E19 ✅
-Prochaine étape : E16 (Mémoire hybride unifiée)
+Statut : E1-E7 ✅ E9-E11 ✅ E13-E14.5 ✅ E16 ✅ E18-E19 ✅
+Prochaine étape : E8 (Gmail entrant + Raycast) ou E17 (WebSocket)
 ```
