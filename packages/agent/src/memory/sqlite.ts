@@ -144,6 +144,7 @@ function initSchema(db: DatabaseSync): void {
   migrateTasksAddModel(db);
   migrateLlmModels(db);
   migrateLlmRouteConfig(db);
+  migrateSeedAnthropicModels(db);
   migrateNotifications(db);
   migrateNotificationSettings(db);
 }
@@ -416,6 +417,19 @@ function migrateLlmModels(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_llm_models_provider ON llm_models(provider_slug);
   `);
+
+  // Seed Anthropic models with known prices
+  const anthropicModels = [
+    ['claude-opus-4-6', 'Claude Opus 4.6', 'anthropic', 200000, 15.0, 75.0, 1, 1, 'text->text'],
+    ['claude-sonnet-4-6', 'Claude Sonnet 4.6', 'anthropic', 200000, 3.0, 15.0, 1, 1, 'text->text'],
+    ['claude-haiku-4-5-20251001', 'Claude Haiku 4.5', 'anthropic', 200000, 1.0, 5.0, 1, 0, 'text->text'],
+  ] as const;
+  for (const [id, name, provider, ctx, priceIn, priceOut, tools, reasoning, modality] of anthropicModels) {
+    db.prepare(
+      "INSERT OR IGNORE INTO llm_models (id, name, provider_slug, context_length, price_input_per_m, price_output_per_m, supports_tools, supports_reasoning, modality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, name, provider, ctx, priceIn, priceOut, tools, reasoning, modality);
+  }
+
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_models')").run();
 }
 
@@ -446,6 +460,28 @@ function migrateLlmRouteConfig(db: DatabaseSync): void {
   }
 
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_llm_route_config')").run();
+}
+
+function migrateSeedAnthropicModels(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'seed_anthropic_models'"
+  ).get();
+  if (existing) return;
+
+  const anthropicModels = [
+    ['claude-opus-4-6', 'Claude Opus 4.6', 'anthropic', 200000, 15.0, 75.0, 1, 1, 'text->text'],
+    ['claude-sonnet-4-6', 'Claude Sonnet 4.6', 'anthropic', 200000, 3.0, 15.0, 1, 1, 'text->text'],
+    ['claude-haiku-4-5-20251001', 'Claude Haiku 4.5', 'anthropic', 200000, 1.0, 5.0, 1, 0, 'text->text'],
+  ] as const;
+  for (const [id, name, provider, ctx, priceIn, priceOut, tools, reasoning, modality] of anthropicModels) {
+    db.prepare(
+      `INSERT INTO llm_models (id, name, provider_slug, context_length, price_input_per_m, price_output_per_m, supports_tools, supports_reasoning, modality)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET price_input_per_m = excluded.price_input_per_m, price_output_per_m = excluded.price_output_per_m`
+    ).run(id, name, provider, ctx, priceIn, priceOut, tools, reasoning, modality);
+  }
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('seed_anthropic_models')").run();
 }
 
 function migrateNotifications(db: DatabaseSync): void {

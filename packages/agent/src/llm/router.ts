@@ -1,4 +1,5 @@
 import { config } from '../config.ts';
+import { getRouteForTaskType } from '../memory/sqlite.ts';
 
 export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_task' | 'orchestration';
 
@@ -7,7 +8,8 @@ interface ModelRoute {
   model: string;
 }
 
-const DEFAULT_ROUTES: Record<TaskType, ModelRoute> = {
+/** Fallback routes if DB not yet initialized */
+const FALLBACK_ROUTES: Record<TaskType, ModelRoute> = {
   conversation:     { provider: 'anthropic',   model: 'claude-sonnet-4-6' },
   compaction:       { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   fact_extraction:  { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
@@ -21,24 +23,25 @@ function inferProvider(model: string): 'anthropic' | 'openrouter' {
   return 'openrouter';
 }
 
-/**
- * Resolve which provider + model to use for a given task type.
- *
- * Priority:
- * 1. Explicit model override (from chat dropdown or task config)
- * 2. Default route for the task type
- * 3. Falls back to anthropic if openrouter key missing
- */
 export function resolveModel(taskType: TaskType, modelOverride?: string): ModelRoute {
   if (modelOverride) {
     return { provider: inferProvider(modelOverride), model: modelOverride };
   }
 
-  const route = DEFAULT_ROUTES[taskType];
-
-  if (route.provider === 'openrouter' && !config.openrouterApiKey) {
-    return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' };
+  // Try DB route first
+  const dbModel = getRouteForTaskType(taskType);
+  if (dbModel) {
+    const route: ModelRoute = { provider: inferProvider(dbModel), model: dbModel };
+    if (route.provider === 'openrouter' && !config.openrouterApiKey) {
+      return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' };
+    }
+    return route;
   }
 
-  return route;
+  // Fallback
+  const fallback = FALLBACK_ROUTES[taskType];
+  if (fallback.provider === 'openrouter' && !config.openrouterApiKey) {
+    return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' };
+  }
+  return fallback;
 }
