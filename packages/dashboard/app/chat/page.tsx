@@ -185,10 +185,13 @@ export default function ChatPage() {
             {m.role === 'assistant' ? (
               <>
                 <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
-                {(m.model || (m.costUsd != null && m.costUsd > 0)) && (
-                  <span className="chat-cost-badge" title={m.costUsd ? `Cout total : $${m.costUsd.toFixed(6)}` : undefined}>
-                    {m.model && <span className="chat-model-name">{m.model}</span>}
-                    {m.costUsd != null && m.costUsd > 0 && ` ~$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`}
+                {m.model && (
+                  <span className="chat-cost-badge" title={m.costUsd && m.costUsd > 0 ? `Cout total : $${m.costUsd.toFixed(6)}` : 'Modèle gratuit ou non facturé'}>
+                    <span className="chat-model-name">{m.model}</span>
+                    {m.costUsd != null && m.costUsd > 0
+                      ? ` ~$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`
+                      : <span className="chat-free-badge"> Free</span>
+                    }
                   </span>
                 )}
               </>

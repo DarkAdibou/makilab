@@ -33,6 +33,7 @@ export interface AgentContext {
   from: string;
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   model?: string;
+  taskType?: string;
 }
 
 // Tools
@@ -59,6 +60,7 @@ export type SubAgentName =
   | 'homeassistant'
   | 'memory'
   | 'code'
+  | 'settings'
   | 'indeed'
   | 'notebooklm'
   | 'calendar'

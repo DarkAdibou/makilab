@@ -921,6 +921,7 @@ body {
 }
 .chat-cost-badge:hover { opacity: 1; }
 .chat-model-name { opacity: 0.8; }
+.chat-free-badge { color: #4ade80; font-weight: 500; }
 
 /* Tool status indicator */
 .chat-tool-status {

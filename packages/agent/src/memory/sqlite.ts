@@ -155,6 +155,7 @@ function initSchema(db: DatabaseSync): void {
   migrateTasksAddNotifyChannels(db);
   migrateLlmModelsAddDescription(db);
   migrateAddDeepSearchRoute(db);
+  migrateFixCronTaskRoute(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -648,6 +649,16 @@ function migrateAddDeepSearchRoute(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('add_deep_search_route')").run();
 }
 
+function migrateFixCronTaskRoute(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'fix_cron_task_route_haiku'"
+  ).get();
+  if (existing) return;
+
+  db.prepare("UPDATE llm_route_config SET model_id = 'claude-haiku-4-5-20251001' WHERE task_type = 'cron_task'").run();
+  db.prepare("INSERT INTO _migrations (name) VALUES ('fix_cron_task_route_haiku')").run();
+}
+
 function migrateLlmModelsAddDescription(db: DatabaseSync): void {
   const existing = db.prepare(
     "SELECT name FROM _migrations WHERE name = 'llm_models_add_description'"
@@ -1056,7 +1067,7 @@ export function listDueScheduledTasks(): TaskRow[] {
   const stmt = getDb().prepare(`
     SELECT * FROM tasks
     WHERE due_at IS NOT NULL
-      AND due_at <= datetime('now')
+      AND datetime(due_at) <= datetime('now')
       AND cron_expression IS NULL
       AND cron_prompt IS NOT NULL
       AND status IN ('pending', 'backlog')
@@ -1557,7 +1568,7 @@ Tu aides ton utilisateur (Adrien) avec ses tâches quotidiennes : emails, recher
 ## Tâches planifiées
 - Si l'utilisateur demande quelque chose "dans X minutes", "à 18h", "demain matin", etc. → crée une tâche ponctuelle avec tasks__create :
   - title : description courte de l'action
-  - due_at : date/heure ISO 8601 UTC (calcule à partir de l'heure actuelle)
+  - due_at : date/heure ISO 8601 UTC strict — appelle d'abord time__get pour connaître l'heure et le décalage UTC, puis calcule l'heure UTC. Format obligatoire : "2026-03-02T11:28:00Z" (toujours terminer par 'Z')
   - cron_prompt : le prompt à exécuter au moment voulu (ex: "Souhaite bonne nuit à l'utilisateur")
   - channel : le canal actuel
   - notify_channels : inclure le canal actuel si c'est whatsapp (ex: ["whatsapp"])

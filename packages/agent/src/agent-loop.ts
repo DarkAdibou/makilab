@@ -182,7 +182,7 @@ export async function runAgentLoop(
     iterations++;
 
     const response = await llm.chat({
-      taskType: 'conversation' as TaskType,
+      taskType: ((context.taskType ?? 'conversation') as TaskType),
       messages,
       system: systemPrompt,
       tools: anthropicTools,

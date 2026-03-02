@@ -23,7 +23,7 @@ import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
 import { getMcpTools, isMcpTool, callMcpTool } from './mcp/bridge.ts';
-import { createLlmClient } from './llm/client.ts';
+import { createLlmClient, type TaskType } from './llm/client.ts';
 import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
@@ -119,7 +119,7 @@ export async function* runAgentLoopStreaming(
       iterations++;
 
       const streamResult = await llm.stream({
-        taskType: 'conversation',
+        taskType: ((context.taskType ?? 'conversation') as TaskType),
         messages,
         system: systemPrompt,
         tools: anthropicTools,

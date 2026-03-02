@@ -144,6 +144,7 @@ export function startCron(): void {
             from: 'cron',
             history: [],
             model: task.model ?? undefined,
+            taskType: 'cron_task',
           });
           const durationMs = Date.now() - start;
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
@@ -191,6 +192,7 @@ export function syncRecurringTasks(): void {
             from: 'cron',
             history: [],
             model: task.model ?? undefined,
+            taskType: 'cron_task',
           });
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({
@@ -239,6 +241,7 @@ export async function executeRecurringTask(task: { id: string; title?: string; c
       from: 'cron',
       history: [],
       model: task.model ?? undefined,
+      taskType: 'cron_task',
     });
     const durationMs = Date.now() - start;
     const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
