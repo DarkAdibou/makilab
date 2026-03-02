@@ -358,7 +358,10 @@ async function* streamOpenRouter(
       if (payload === '[DONE]') continue;
 
       let chunk: OpenRouterStreamChunk;
-      try { chunk = JSON.parse(payload); } catch { continue; }
+      try { chunk = JSON.parse(payload); } catch (parseErr) {
+        logger.warn({ payload: payload.slice(0, 200), err: parseErr instanceof Error ? parseErr.message : String(parseErr) }, 'OpenRouter SSE JSON parse error');
+        continue;
+      }
 
       const delta = chunk.choices?.[0]?.delta;
       if (!delta) continue;
@@ -556,15 +559,11 @@ export function createLlmClient(): LlmClient {
                 totalInputTokens, totalOutputTokens, durationMs,
                 request.channel, request.taskId,
               );
-              // Inject fallback text as a text_delta event so the stream consumer gets it
+              // Update currentText so message.content is coherent
+              // (eventBuffer injection is useless here — asyncIterable is already closed)
               const textBlock = fallback.content.find(b => b.type === 'text') as Anthropic.TextBlock | undefined;
               if (textBlock?.text) {
                 currentText = textBlock.text;
-                eventBuffer.push({
-                  type: 'content_block_delta',
-                  index: 0,
-                  delta: { type: 'text_delta', text: textBlock.text },
-                } as Anthropic.RawMessageStreamEvent);
               }
               const message: Anthropic.Message = {
                 id: 'msg_openrouter',

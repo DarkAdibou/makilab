@@ -258,6 +258,7 @@ export interface ModelInfo {
   id: string;
   label: string;
   provider: string;
+  recommended: boolean;
 }
 
 export async function fetchCostSummary(period: 'day' | 'week' | 'month' | 'year' = 'month'): Promise<CostSummary> {

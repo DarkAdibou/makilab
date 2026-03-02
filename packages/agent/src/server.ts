@@ -283,9 +283,9 @@ export async function buildServer() {
     };
   });
 
-  // GET /api/models — available LLM models
+  // GET /api/models — available LLM models (recommended for conversation first)
   app.get('/api/models', async () => {
-    return listAvailableModels();
+    return listAvailableModels('conversation');
   });
 
   // GET /api/costs/summary — cost summary for a period

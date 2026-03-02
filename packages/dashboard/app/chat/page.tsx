@@ -155,9 +155,18 @@ export default function ChatPage() {
               setSelectedModel(modelId);
               if (modelId) updateRouteApi('conversation', modelId).catch(() => {});
             }}>
-              {models.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
+              {models.some(m => m.recommended) && (
+                <optgroup label="Recommandés">
+                  {models.filter(m => m.recommended).map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Tous les modèles">
+                {models.filter(m => !m.recommended).map(m => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </optgroup>
               {selectedModel && !models.find(m => m.id === selectedModel) && (
                 <option value={selectedModel}>{selectedModel}</option>
               )}

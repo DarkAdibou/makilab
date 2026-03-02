@@ -140,6 +140,17 @@ export async function* runAgentLoopStreaming(
       totalCostUsd += usage.costUsd;
       if (!resolvedModel) resolvedModel = usage.model;
 
+      // If the stream produced no text (e.g. OpenRouter providers that send tool_calls
+      // without delta.content, triggering the non-streaming fallback), recover the text
+      // from message.content — the asyncIterable is already closed so we yield it now.
+      if (!fullText) {
+        const textBlock = finalMessage.content.find(b => b.type === 'text') as { text: string } | undefined;
+        if (textBlock?.text) {
+          fullText = textBlock.text;
+          yield { type: 'text_delta', content: textBlock.text };
+        }
+      }
+
       if (finalMessage.stop_reason === 'end_turn') {
         break;
       }

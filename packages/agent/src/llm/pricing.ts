@@ -1,4 +1,6 @@
 import { getLlmModel, getLlmModels } from '../memory/sqlite.ts';
+import { scoreModelsForTask } from '../llm/catalog.ts';
+import type { TaskType } from './router.ts';
 
 export function getModelPrice(model: string): { input: number; output: number } | null {
   const m = getLlmModel(model);
@@ -12,9 +14,22 @@ export function calculateCost(model: string, tokensIn: number, tokensOut: number
   return (tokensIn * price.input + tokensOut * price.output) / 1_000_000;
 }
 
-export function listAvailableModels(): Array<{ id: string; label: string; provider: string }> {
-  return getLlmModels({ tools: true })
+export function listAvailableModels(taskType?: TaskType): Array<{ id: string; label: string; provider: string; recommended: boolean }> {
+  const models = getLlmModels({ tools: true })
     .filter(m => m.modality.includes('text'))
-    .map(m => ({ id: m.id, label: m.name, provider: m.provider_slug }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .map(m => ({ id: m.id, label: m.name, provider: m.provider_slug, recommended: false }));
+
+  if (taskType) {
+    const topIds = scoreModelsForTask(taskType, 3).map(s => s.modelId);
+    const ranked = models.map(m => ({ ...m, recommended: topIds.includes(m.id), _rank: topIds.indexOf(m.id) }));
+    return ranked
+      .sort((a, b) => {
+        if (a.recommended !== b.recommended) return a.recommended ? -1 : 1;
+        if (a.recommended && b.recommended) return a._rank - b._rank;
+        return a.label.localeCompare(b.label);
+      })
+      .map(({ _rank, ...m }) => m);
+  }
+
+  return models.sort((a, b) => a.label.localeCompare(b.label));
 }
