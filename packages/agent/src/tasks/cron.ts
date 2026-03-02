@@ -19,12 +19,30 @@ import type { ScheduledTask } from 'node-cron';
 import { config } from '../config.ts';
 import { logger } from '../logger.ts';
 import { runAgentLoop } from '../agent-loop.ts';
-import { createTask, listRecurringTasks, logTaskExecution } from '../memory/sqlite.ts';
+import { createTask, listRecurringTasks, listDueScheduledTasks, logTaskExecution, updateTaskStatus, saveMessage } from '../memory/sqlite.ts';
 import { runWorkflow } from './runner.ts';
 import type { WorkflowStep } from './runner.ts';
 import type { Channel } from '@makilab/shared';
 
 const dynamicJobs = new Map<string, ScheduledTask>();
+
+/** Dispatch a message to additional notification channels */
+async function dispatchToChannels(reply: string, taskChannel: string, notifyChannels: string[], taskTitle: string): Promise<void> {
+  for (const ch of notifyChannels) {
+    if (ch === taskChannel) continue; // Already handled by main runAgentLoop
+    try {
+      if (ch === 'whatsapp') {
+        const { sendWhatsAppMessage } = await import('../whatsapp/gateway.ts');
+        await sendWhatsAppMessage(reply);
+      }
+      if (ch === 'mission_control') {
+        saveMessage('mission_control', 'assistant', `[${taskTitle}] ${reply}`);
+      }
+    } catch (err) {
+      logger.warn({ channel: ch, err: err instanceof Error ? err.message : String(err) }, 'Failed to dispatch to notify channel');
+    }
+  }
+}
 
 /** Start all CRON jobs. Call once at boot if CRON_ENABLED=true */
 export function startCron(): void {
@@ -111,6 +129,42 @@ export function startCron(): void {
     }
   });
 
+  // ── One-shot scheduled tasks — poll every minute ─────────────────────
+  cron.schedule('* * * * *', async () => {
+    try {
+      const dueTasks = listDueScheduledTasks();
+      for (const task of dueTasks) {
+        logger.info({ taskId: task.id, title: task.title, dueAt: task.due_at }, 'Executing scheduled one-shot task');
+        updateTaskStatus(task.id, 'in_progress');
+        const notifyChannels: string[] = (() => { try { return JSON.parse(task.notify_channels || '[]'); } catch { return []; } })();
+        const start = Date.now();
+        try {
+          const reply = await runAgentLoop(task.cron_prompt!, {
+            channel: (task.channel as Channel) ?? 'cli',
+            from: 'cron',
+            history: [],
+            model: task.model ?? undefined,
+          });
+          const durationMs = Date.now() - start;
+          const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
+          logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
+          updateTaskStatus(task.id, 'done');
+
+          if (notifyChannels.length > 0) {
+            await dispatchToChannels(reply, task.channel, notifyChannels, task.title);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error({ taskId: task.id, err: message }, 'Scheduled task failed');
+          logTaskExecution({ taskId: task.id, status: 'error', durationMs: Date.now() - start, errorMessage: message });
+          updateTaskStatus(task.id, 'failed');
+        }
+      }
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'CRON: scheduled tasks poll failed');
+    }
+  });
+
   logger.info({}, 'CRON scheduler started');
 }
 
@@ -126,6 +180,8 @@ export function syncRecurringTasks(): void {
     if (!task.cron_expression || !task.cron_prompt) continue;
 
     try {
+      const notifyChannels: string[] = (() => { try { return JSON.parse(task.notify_channels || '[]'); } catch { return []; } })();
+
       const job = cron.schedule(task.cron_expression, async () => {
         logger.info({ taskId: task.id, title: task.title }, 'Running recurring task');
         const start = Date.now();
@@ -143,6 +199,11 @@ export function syncRecurringTasks(): void {
             durationMs: Date.now() - start,
             resultSummary: summary,
           });
+
+          // Dispatch to additional notification channels
+          if (notifyChannels.length > 0) {
+            await dispatchToChannels(reply, task.channel, notifyChannels, task.title);
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error({ taskId: task.id, err: message }, 'Recurring task failed');
@@ -166,7 +227,7 @@ export function syncRecurringTasks(): void {
 }
 
 /** Execute a recurring task immediately (manual trigger) */
-export async function executeRecurringTask(task: { id: string; cron_prompt: string | null; channel: string; model?: string | null }): Promise<{ success: boolean; durationMs: number; result?: string; error?: string }> {
+export async function executeRecurringTask(task: { id: string; title?: string; cron_prompt: string | null; channel: string; model?: string | null; notify_channels?: string }): Promise<{ success: boolean; durationMs: number; result?: string; error?: string }> {
   if (!task.cron_prompt) {
     return { success: false, durationMs: 0, error: 'No cron_prompt defined' };
   }
@@ -182,6 +243,13 @@ export async function executeRecurringTask(task: { id: string; cron_prompt: stri
     const durationMs = Date.now() - start;
     const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
     logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
+
+    // Dispatch to additional notification channels
+    const notifyChannels: string[] = (() => { try { return JSON.parse(task.notify_channels || '[]'); } catch { return []; } })();
+    if (notifyChannels.length > 0) {
+      await dispatchToChannels(reply, task.channel, notifyChannels, task.title ?? 'Tâche récurrente');
+    }
+
     return { success: true, durationMs, result: summary };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

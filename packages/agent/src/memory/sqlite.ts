@@ -151,6 +151,7 @@ function initSchema(db: DatabaseSync): void {
   migrateMemorySettings(db);
   migrateMemoryRetrievals(db);
   migrateFts5Messages(db);
+  migrateTasksAddNotifyChannels(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -614,6 +615,26 @@ function migrateFts5Messages(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('add_fts5_messages')").run();
 }
 
+/** Migration: add notify_channels column to tasks for multi-channel dispatch */
+function migrateTasksAddNotifyChannels(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'tasks_add_notify_channels'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+  ).get() as { sql: string } | undefined);
+
+  if (schema?.sql.includes('notify_channels')) {
+    db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_notify_channels')").run();
+    return;
+  }
+
+  db.exec("ALTER TABLE tasks ADD COLUMN notify_channels TEXT NOT NULL DEFAULT '[]'");
+  db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_notify_channels')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -659,8 +680,20 @@ export function saveMessage(
 export function getRecentMessages(
   channel: string,
   limit = 20,
-): Array<{ role: 'user' | 'assistant'; content: string }> {
+): Array<{ role: 'user' | 'assistant'; content: string; channel?: string }> {
   const db = getDb();
+
+  if (channel === 'all') {
+    const rows = db.prepare(`
+      SELECT role, content, channel FROM messages
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(limit) as Array<{ role: string; content: string; channel: string }>;
+    return rows
+      .reverse()
+      .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, channel: r.channel }));
+  }
+
   const rows = db.prepare(`
     SELECT role, content FROM messages
     WHERE channel = ?
@@ -756,6 +789,7 @@ export interface TaskRow {
   cron_enabled: number; // 0 or 1
   cron_prompt: string | null;
   model: string | null;
+  notify_channels: string; // JSON array string e.g. '["whatsapp","mission_control"]'
   created_at: string;
   updated_at: string;
 }
@@ -821,11 +855,12 @@ export function createTask(params: {
   cronExpression?: string;
   cronEnabled?: boolean;
   cronPrompt?: string;
+  notifyChannels?: string[];
 }): string {
   const id = randomUUID();
   getDb().prepare(`
-    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id, description, tags, cron_expression, cron_enabled, cron_prompt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (id, title, created_by, channel, priority, context, due_at, cron_id, description, tags, cron_expression, cron_enabled, cron_prompt, notify_channels)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.title,
@@ -840,6 +875,7 @@ export function createTask(params: {
     params.cronExpression ?? null,
     params.cronEnabled ? 1 : 0,
     params.cronPrompt ?? null,
+    JSON.stringify(params.notifyChannels ?? []),
   );
   return id;
 }
@@ -925,6 +961,7 @@ export function updateTask(id: string, fields: {
   cron_enabled?: boolean;
   cron_prompt?: string | null;
   model?: string | null;
+  notify_channels?: string[];
 }): TaskRow | null {
   const sets: string[] = [];
   const params: (string | number | null)[] = [];
@@ -938,6 +975,7 @@ export function updateTask(id: string, fields: {
   if (fields.cron_enabled !== undefined) { sets.push('cron_enabled = ?'); params.push(fields.cron_enabled ? 1 : 0); }
   if (fields.cron_prompt !== undefined) { sets.push('cron_prompt = ?'); params.push(fields.cron_prompt); }
   if (fields.model !== undefined) { sets.push('model = ?'); params.push(fields.model); }
+  if (fields.notify_channels !== undefined) { sets.push('notify_channels = ?'); params.push(JSON.stringify(fields.notify_channels)); }
   if (sets.length === 0) return getTask(id);
   sets.push("updated_at = datetime('now')");
   params.push(id);
@@ -973,6 +1011,20 @@ export function listRecurringTasks(): TaskRow[] {
 /** List all tasks with cron_expression (enabled or not) */
 export function listAllRecurringTasks(): TaskRow[] {
   const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_expression IS NOT NULL ORDER BY created_at DESC');
+  return [...stmt.all()] as unknown as TaskRow[];
+}
+
+/** List one-shot scheduled tasks that are due (due_at <= now, no cron_expression, status pending, has cron_prompt) */
+export function listDueScheduledTasks(): TaskRow[] {
+  const stmt = getDb().prepare(`
+    SELECT * FROM tasks
+    WHERE due_at IS NOT NULL
+      AND due_at <= datetime('now')
+      AND cron_expression IS NULL
+      AND cron_prompt IS NOT NULL
+      AND status IN ('pending', 'backlog')
+    ORDER BY due_at ASC
+  `);
   return [...stmt.all()] as unknown as TaskRow[];
 }
 

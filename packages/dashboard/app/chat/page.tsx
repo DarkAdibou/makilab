@@ -8,6 +8,7 @@ import type { ModelInfo } from '../lib/api';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  channel?: string;
 }
 
 interface ToolCall {
@@ -51,7 +52,7 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    fetchMessages('mission_control', 50).then(setMessages).catch(() => {});
+    fetchMessages('all', 50).then(setMessages).catch(() => {});
     fetchModels().then(setModels).catch(() => {});
   }, []);
 
@@ -131,7 +132,6 @@ export default function ChatPage() {
     <div className="chat-container">
       <div className="chat-header">
         <h1>Chat</h1>
-        <span className="badge badge-muted">mission_control</span>
         {models.length > 0 && (
           <div className="model-selector" style={{ marginLeft: 'auto' }}>
             <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
@@ -146,6 +146,11 @@ export default function ChatPage() {
       <div className="chat-messages">
         {messages.map((m, i) => (
           <div key={i} className={`chat-bubble ${m.role}`}>
+            {m.channel && m.channel !== 'mission_control' && (
+              <span className="badge badge-muted" style={{ fontSize: '0.625rem', padding: '1px 5px', marginBottom: 4, display: 'inline-block' }}>
+                {m.channel}
+              </span>
+            )}
             {m.role === 'assistant' ? (
               <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
             ) : (

@@ -1,7 +1,7 @@
 import { WhatsAppSessionManager } from './session-manager.ts';
 import { logger } from '../logger.ts';
 import { runAgentLoop } from '../agent-loop.ts';
-import { getRecentMessages, saveMessage } from '../memory/sqlite.ts';
+import { getRecentMessages } from '../memory/sqlite.ts';
 import type { IncomingMessage, OutgoingMessage } from '@makilab/shared';
 import type { Channel } from '@makilab/shared';
 
@@ -34,10 +34,7 @@ export async function initWhatsApp(): Promise<void> {
         history,
       });
 
-      // Save to SQLite (visible in dashboard)
-      saveMessage({ channel: 'whatsapp', role: 'user', content: msg.text });
-      saveMessage({ channel: 'whatsapp', role: 'assistant', content: reply });
-
+      // agent-loop.ts already saves messages to SQLite
       return { channel: 'whatsapp', to: msg.from, text: reply };
     },
 

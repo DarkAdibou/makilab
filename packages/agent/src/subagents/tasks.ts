@@ -44,7 +44,8 @@ export const tasksSubAgent: SubAgent = {
           channel:         { type: 'string', description: 'Canal origine (whatsapp, cli...)' },
           due_at:          { type: 'string', description: 'Échéance ISO 8601 (optionnel)' },
           cron_expression: { type: 'string', description: 'Expression CRON pour tâches récurrentes (ex: "0 8 * * 1" = lundi 8h). Laisser vide pour une tâche ponctuelle.' },
-          cron_prompt:     { type: 'string', description: 'Le prompt à exécuter quand le CRON se déclenche' },
+          cron_prompt:     { type: 'string', description: 'Le prompt à exécuter automatiquement (pour tâches récurrentes OU planifiées one-shot avec due_at)' },
+          notify_channels: { type: 'array', items: { type: 'string' }, description: 'Canaux supplémentaires où envoyer le résultat (ex: ["whatsapp","mission_control"])' },
         },
         required: ['title', 'channel'],
       },
@@ -108,10 +109,11 @@ export const tasksSubAgent: SubAgent = {
           cronExpression: cronExpr,
           cronEnabled: !!cronExpr,
           cronPrompt: input['cron_prompt'] as string | undefined,
+          notifyChannels: input['notify_channels'] as string[] | undefined,
         });
         if (cronExpr) syncRecurringTasks();
         // Auto-assign optimal model for recurring tasks
-        if (input['cron_expression'] && input['cron_prompt']) {
+        if (input['cron_prompt']) {
           try {
             const { classifyAndAssignModel } = await import('../llm/classify-task.ts');
             const model = await classifyAndAssignModel(input['cron_prompt'] as string);

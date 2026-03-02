@@ -407,6 +407,35 @@ export default function RecurringTasksPage() {
                 </div>
 
                 <div className="detail-cron-info">
+                  <span className="detail-label" style={{ marginTop: 0 }}>Canaux de notification</span>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    {['whatsapp', 'mission_control'].map(ch => {
+                      const channels: string[] = (() => { try { return JSON.parse(selectedTask.notify_channels || '[]'); } catch { return []; } })();
+                      const checked = channels.includes(ch);
+                      return (
+                        <label key={ch} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={async () => {
+                              const next = checked ? channels.filter(c => c !== ch) : [...channels, ch];
+                              try {
+                                await updateTaskApi(selectedTask.id, { notify_channels: next });
+                                await loadTasks();
+                              } catch (err) { console.error(err); }
+                            }}
+                          />
+                          {ch === 'whatsapp' ? 'WhatsApp' : 'Mission Control'}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                    En plus du canal principal ({selectedTask.channel})
+                  </span>
+                </div>
+
+                <div className="detail-cron-info">
                   <span className="detail-label" style={{ marginTop: 0 }}>Prompt</span>
                   <textarea
                     className="textarea"
