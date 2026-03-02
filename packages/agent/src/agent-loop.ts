@@ -156,7 +156,11 @@ export async function runAgentLoop(
   const retrieval = await autoRetrieve(userMessage, channel);
   const retrievalSection = buildRetrievalPrompt(retrieval);
 
-  const systemPrompt = [getBaseSystemPrompt(), memorySection, retrievalSection, capabilitiesSection]
+  const cronSection = context.from === 'cron'
+    ? '## Mode tâche automatique\nTu exécutes une tâche planifiée. Agis directement sans commenter tes intentions. Pas de "Bien sûr", "Je vais", "Je m\'apprête à" — exécute et rapporte le résultat uniquement.'
+    : '';
+
+  const systemPrompt = [getBaseSystemPrompt(), cronSection, memorySection, retrievalSection, capabilitiesSection]
     .filter(Boolean)
     .join('\n\n');
 

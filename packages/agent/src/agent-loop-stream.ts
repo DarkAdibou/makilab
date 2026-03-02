@@ -267,7 +267,7 @@ export async function* runAgentLoopStreaming(
 
   // ── Persist + background tasks ──────────────────────────────────────────
   saveMessage(channel, 'user', userMessage);
-  saveMessage(channel, 'assistant', fullText);
+  saveMessage(channel, 'assistant', fullText, resolvedModel || undefined);
 
   // Collect tool result texts from the conversation
   const toolResultTexts = messages

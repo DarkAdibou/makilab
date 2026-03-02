@@ -156,6 +156,7 @@ function initSchema(db: DatabaseSync): void {
   migrateLlmModelsAddDescription(db);
   migrateAddDeepSearchRoute(db);
   migrateFixCronTaskRoute(db);
+  migrateMessagesAddModel(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -659,6 +660,22 @@ function migrateFixCronTaskRoute(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('fix_cron_task_route_haiku')").run();
 }
 
+function migrateMessagesAddModel(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'messages_add_model'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'"
+  ).get() as { sql: string } | undefined);
+
+  if (schema && !schema.sql.includes('model')) {
+    db.exec("ALTER TABLE messages ADD COLUMN model TEXT");
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES ('messages_add_model')").run();
+}
+
 function migrateLlmModelsAddDescription(db: DatabaseSync): void {
   const existing = db.prepare(
     "SELECT name FROM _migrations WHERE name = 'llm_models_add_description'"
@@ -710,42 +727,43 @@ export function saveMessage(
   channel: string,
   role: 'user' | 'assistant',
   content: string,
+  model?: string,
 ): void {
   getDb().prepare(`
-    INSERT INTO messages (channel, role, content) VALUES (?, ?, ?)
-  `).run(channel, role, content);
+    INSERT INTO messages (channel, role, content, model) VALUES (?, ?, ?, ?)
+  `).run(channel, role, content, model ?? null);
 }
 
 /** Load last N messages for a channel (for context window) */
 export function getRecentMessages(
   channel: string,
   limit = 20,
-): Array<{ role: 'user' | 'assistant'; content: string; channel?: string }> {
+): Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string }> {
   const db = getDb();
 
   if (channel === 'all') {
     const rows = db.prepare(`
-      SELECT role, content, channel FROM messages
+      SELECT role, content, channel, model FROM messages
       WHERE channel NOT LIKE 'fts-test%'
       ORDER BY id DESC
       LIMIT ?
-    `).all(limit) as Array<{ role: string; content: string; channel: string }>;
+    `).all(limit) as Array<{ role: string; content: string; channel: string; model: string | null }>;
     return rows
       .reverse()
-      .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, channel: r.channel }));
+      .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, channel: r.channel, model: r.model ?? undefined }));
   }
 
   const rows = db.prepare(`
-    SELECT role, content FROM messages
+    SELECT role, content, model FROM messages
     WHERE channel = ?
     ORDER BY id DESC
     LIMIT ?
-  `).all(channel, limit) as Array<{ role: string; content: string }>;
+  `).all(channel, limit) as Array<{ role: string; content: string; model: string | null }>;
 
   // Reverse to get chronological order
   return rows
     .reverse()
-    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }));
+    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, model: r.model ?? undefined }));
 }
 
 /** Count messages for a channel */
@@ -1357,8 +1375,9 @@ export function getLlmUsageSummary(period: 'day' | 'week' | 'month' | 'year'): {
   totalCalls: number;
   totalTokensIn: number;
   totalTokensOut: number;
-  byModel: Array<{ model: string; cost: number; calls: number }>;
+  byModel: Array<{ model: string; cost: number; calls: number; tokensIn: number; tokensOut: number }>;
   byTaskType: Array<{ taskType: string; cost: number; calls: number }>;
+  byModelAndTaskType: Array<{ model: string; taskType: string; cost: number; calls: number }>;
 } {
   const sinceMap = { day: '-1 day', week: '-7 days', month: 'start of month', year: 'start of year' };
   const since = sinceMap[period];
@@ -1373,16 +1392,28 @@ export function getLlmUsageSummary(period: 'day' | 'week' | 'month' | 'year'): {
   `).get(since) as { total_cost: number; total_calls: number; total_tokens_in: number; total_tokens_out: number };
 
   const byModel = db.prepare(`
-    SELECT model, COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls
+    SELECT model,
+           COALESCE(SUM(cost_usd), 0) as cost,
+           COUNT(*) as calls,
+           COALESCE(SUM(tokens_in), 0) as tokensIn,
+           COALESCE(SUM(tokens_out), 0) as tokensOut
     FROM llm_usage WHERE created_at >= datetime('now', ?)
     GROUP BY model ORDER BY cost DESC
-  `).all(since) as unknown as Array<{ model: string; cost: number; calls: number }>;
+  `).all(since) as unknown as Array<{ model: string; cost: number; calls: number; tokensIn: number; tokensOut: number }>;
 
   const byTaskType = db.prepare(`
     SELECT task_type as taskType, COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls
     FROM llm_usage WHERE created_at >= datetime('now', ?)
     GROUP BY task_type ORDER BY cost DESC
   `).all(since) as unknown as Array<{ taskType: string; cost: number; calls: number }>;
+
+  const byModelAndTaskType = db.prepare(`
+    SELECT model, task_type as taskType,
+           COALESCE(SUM(cost_usd), 0) as cost,
+           COUNT(*) as calls
+    FROM llm_usage WHERE created_at >= datetime('now', ?)
+    GROUP BY model, task_type ORDER BY model ASC, cost DESC
+  `).all(since) as unknown as Array<{ model: string; taskType: string; cost: number; calls: number }>;
 
   return {
     totalCost: totals.total_cost,
@@ -1391,6 +1422,7 @@ export function getLlmUsageSummary(period: 'day' | 'week' | 'month' | 'year'): {
     totalTokensOut: totals.total_tokens_out,
     byModel,
     byTaskType,
+    byModelAndTaskType,
   };
 }
 

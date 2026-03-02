@@ -3,7 +3,7 @@ const API_BASE = '/api';
 export async function fetchMessages(channel = 'mission_control', limit = 50) {
   const res = await fetch(`${API_BASE}/messages?channel=${channel}&limit=${limit}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json() as Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
+  return res.json() as Promise<Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string }>>;
 }
 
 export async function sendMessage(message: string, channel = 'mission_control') {
@@ -231,8 +231,9 @@ export interface CostSummary {
   totalCalls: number;
   totalTokensIn: number;
   totalTokensOut: number;
-  byModel: Array<{ model: string; cost: number; calls: number }>;
+  byModel: Array<{ model: string; cost: number; calls: number; tokensIn: number; tokensOut: number }>;
   byTaskType: Array<{ taskType: string; cost: number; calls: number }>;
+  byModelAndTaskType: Array<{ model: string; taskType: string; cost: number; calls: number }>;
 }
 
 export interface CostHistoryPoint {

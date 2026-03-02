@@ -6,6 +6,36 @@ import { ChevronDown } from 'lucide-react';
 import { fetchCostSummary, fetchCostHistory, fetchRecentUsage, fetchSuggestions, fetchUsageContext } from '../lib/api';
 import type { CostSummary, CostHistoryPoint, LlmUsageEntry, OptimizationSuggestion, AgentEvent } from '../lib/api';
 
+const PIE_COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#84cc16'];
+
+function PieChart({ data }: { data: Array<{ label: string; value: number; color: string }> }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return null;
+
+  let cumAngle = -Math.PI / 2;
+  const R = 60;
+  const cx = 80;
+  const cy = 80;
+
+  return (
+    <svg width={160} height={160} viewBox="0 0 160 160">
+      {data.map((d, i) => {
+        const angle = (d.value / total) * 2 * Math.PI;
+        const startAngle = cumAngle;
+        cumAngle += angle;
+        const endAngle = cumAngle;
+        const x1 = cx + R * Math.cos(startAngle);
+        const y1 = cy + R * Math.sin(startAngle);
+        const x2 = cx + R * Math.cos(endAngle);
+        const y2 = cy + R * Math.sin(endAngle);
+        const largeArc = angle > Math.PI ? 1 : 0;
+        const path = `M ${cx} ${cy} L ${x1} ${y1} A ${R} ${R} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        return <path key={i} d={path} fill={d.color} stroke="var(--background)" strokeWidth={1.5} />;
+      })}
+    </svg>
+  );
+}
+
 type Period = 'day' | 'week' | 'month' | 'year';
 
 function formatCost(usd: number): string {
@@ -129,34 +159,37 @@ export default function CostsPage() {
               {summary.byModel.length === 0 ? (
                 <p className="text-muted">Aucune donnee</p>
               ) : (
-                summary.byModel.map(m => (
-                  <div key={m.model} className="costs-breakdown-row">
-                    <span className="costs-breakdown-label">{m.model.split('/').pop()}</span>
-                    <span className="costs-breakdown-bar-wrapper">
-                      <span className="costs-breakdown-bar" style={{ width: `${Math.max((m.cost / summary.totalCost) * 100, 2)}%` }} />
-                    </span>
-                    <span className="costs-breakdown-value">{formatCost(m.cost)}</span>
-                    <span className="text-muted" style={{ fontSize: '0.75rem', minWidth: 50, textAlign: 'right' }}>{m.calls} calls</span>
-                  </div>
-                ))
+                <ModelBreakdown
+                  byModel={summary.byModel}
+                  byModelAndTaskType={summary.byModelAndTaskType}
+                  totalCost={summary.totalCost}
+                />
               )}
             </div>
             <div className="card command-section">
               <h2>Par type</h2>
               {summary.byTaskType.length === 0 ? (
                 <p className="text-muted">Aucune donnee</p>
-              ) : (
-                summary.byTaskType.map(t => (
-                  <div key={t.taskType} className="costs-breakdown-row">
-                    <span className="costs-breakdown-label">{t.taskType}</span>
-                    <span className="costs-breakdown-bar-wrapper">
-                      <span className="costs-breakdown-bar" style={{ width: `${Math.max((t.cost / summary.totalCost) * 100, 2)}%` }} />
-                    </span>
-                    <span className="costs-breakdown-value">{formatCost(t.cost)}</span>
-                    <span className="text-muted" style={{ fontSize: '0.75rem', minWidth: 50, textAlign: 'right' }}>{t.calls} calls</span>
+              ) : (() => {
+                const pieData = summary.byTaskType.map((t, i) => ({ label: t.taskType, value: t.cost, color: PIE_COLORS[i % PIE_COLORS.length]! }));
+                return (
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                    <div style={{ flexShrink: 0 }}>
+                      <PieChart data={pieData} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {summary.byTaskType.map((t, i) => (
+                        <div key={t.taskType} className="costs-breakdown-row" style={{ gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0, display: 'inline-block' }} />
+                          <span className="costs-breakdown-label">{t.taskType}</span>
+                          <span className="costs-breakdown-value">{formatCost(t.cost)}</span>
+                          <span className="text-muted" style={{ fontSize: '0.75rem' }}>{t.calls}x</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))
-              )}
+                );
+              })()}
             </div>
           </div>
 
@@ -247,6 +280,59 @@ export default function CostsPage() {
       ) : (
         <p className="text-muted">Erreur de chargement</p>
       )}
+    </div>
+  );
+}
+
+function ModelBreakdown({ byModel, byModelAndTaskType, totalCost }: {
+  byModel: Array<{ model: string; cost: number; calls: number; tokensIn: number; tokensOut: number }>;
+  byModelAndTaskType: Array<{ model: string; taskType: string; cost: number; calls: number }>;
+  totalCost: number;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const pieData = byModel.map((m, i) => ({ label: m.model.split('/').pop()!, value: m.cost, color: PIE_COLORS[i % PIE_COLORS.length]! }));
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      <div style={{ flexShrink: 0 }}>
+        <PieChart data={pieData} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {byModel.map((m, i) => {
+          const shortName = m.model.split('/').pop()!;
+          const isExpanded = expanded === m.model;
+          const taskBreakdown = byModelAndTaskType.filter(r => r.model === m.model);
+          return (
+            <div key={m.model}>
+              <div
+                className="costs-breakdown-row"
+                style={{ cursor: taskBreakdown.length > 0 ? 'pointer' : 'default', gap: 6, paddingTop: 3, paddingBottom: 3 }}
+                onClick={() => taskBreakdown.length > 0 && setExpanded(isExpanded ? null : m.model)}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0, display: 'inline-block' }} />
+                <span className="costs-breakdown-label" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName}</span>
+                <span className="costs-breakdown-value">{formatCost(m.cost)}</span>
+                <span className="text-muted" style={{ fontSize: '0.75rem' }}>{formatTokens(m.tokensIn + m.tokensOut)}t</span>
+                {taskBreakdown.length > 0 && (
+                  <ChevronDown size={12} style={{ transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s', color: 'var(--muted-foreground)', flexShrink: 0 }} />
+                )}
+              </div>
+              {isExpanded && taskBreakdown.length > 0 && (
+                <div style={{ paddingLeft: 14, paddingBottom: 4 }}>
+                  {taskBreakdown.map(t => (
+                    <div key={t.taskType} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0' }}>
+                      <span className="badge badge-muted" style={{ fontSize: '0.625rem', padding: '1px 4px' }}>{t.taskType}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', flex: 1 }}>{t.calls}x</span>
+                      <span style={{ fontSize: '0.75rem' }}>{formatCost(t.cost)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

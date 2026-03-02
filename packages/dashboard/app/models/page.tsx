@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import {
   fetchSuggestions,
   fetchRoutes,
@@ -345,9 +345,8 @@ export default function ModelsPage() {
                 const isExpanded = expandedId === m.id;
                 const useCases = inferUseCases(m);
                 return (
-                  <>
+                  <Fragment key={m.id}>
                     <tr
-                      key={m.id}
                       className="recurring-row"
                       style={{ cursor: 'pointer' }}
                       onClick={() => setExpandedId(isExpanded ? null : m.id)}
@@ -394,7 +393,7 @@ export default function ModelsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
               {displayedCatalog.length === 0 && (
