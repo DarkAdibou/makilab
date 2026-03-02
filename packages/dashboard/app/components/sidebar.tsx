@@ -26,6 +26,7 @@ const SECTIONS = [
     label: 'SETTINGS',
     items: [
       { href: '/settings/notifications', label: 'Notifications', icon: '\u{1F514}' },
+      { href: '/settings/retrieval', label: 'Auto-retrieval', icon: '\u{1F50D}' },
     ],
   },
 ];

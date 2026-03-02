@@ -685,9 +685,10 @@ body {
 .memory-fact-key { font-size: 0.8125rem; font-weight: 600; min-width: 120px; font-family: var(--font-mono); }
 .memory-fact-value { flex: 1; font-size: 0.8125rem; color: var(--foreground); }
 
-.memory-search-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.memory-search-sticky { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 12px 0; margin-bottom: 8px; }
+.memory-search-bar { display: flex; align-items: center; gap: 8px; }
 .memory-search-toggle { display: flex; gap: 2px; }
-.memory-search-results { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.memory-search-results { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; max-height: 400px; overflow-y: auto; }
 .memory-search-result-card { padding: 14px 16px; }
 
 .memory-settings-section { display: flex; flex-direction: column; gap: 14px; }
