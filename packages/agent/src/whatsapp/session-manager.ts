@@ -49,6 +49,22 @@ interface SessionState {
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 3000;
 
+// Suppress noisy non-blocking Baileys/libsignal errors (Bad MAC, session decryption)
+const SUPPRESSED_PATTERNS = ['Bad MAC', 'Failed to decrypt message', 'Session error:', 'Closing session: SessionEntry', 'Closing open session'];
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = function (chunk: string | Uint8Array, ...args: unknown[]): boolean {
+  const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();
+  if (SUPPRESSED_PATTERNS.some(p => str.includes(p))) return true;
+  return (originalStderrWrite as (...a: unknown[]) => boolean)(chunk, ...args);
+} as typeof process.stderr.write;
+
+const originalConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  const first = String(args[0] ?? '');
+  if (SUPPRESSED_PATTERNS.some(p => first.includes(p))) return;
+  originalConsoleError(...args);
+};
+
 export class WhatsAppSessionManager {
   private state: SessionState = {
     status: 'disconnected',
