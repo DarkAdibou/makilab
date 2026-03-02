@@ -10,7 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.ts';
-import { findTool, tools as legacyTools } from './tools/index.ts';
+import { findTool } from './tools/index.ts';
 import { getAllSubAgents, findSubAgent, buildCapabilitiesPrompt } from './subagents/registry.ts';
 import {
   loadMemoryContext,
@@ -36,7 +36,7 @@ function getBaseSystemPrompt(): string {
   return getAgentPrompt();
 }
 
-/** Build the full tool list: subagent actions + legacy tools */
+/** Build the full tool list: subagent actions + MCP tools */
 function buildToolList(): Anthropic.Tool[] {
   const anthropicTools: Anthropic.Tool[] = [];
 
@@ -48,15 +48,6 @@ function buildToolList(): Anthropic.Tool[] {
         input_schema: action.inputSchema,
       });
     }
-  }
-
-  for (const t of legacyTools) {
-    if (t.name === 'get_time') continue;
-    anthropicTools.push({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema,
-    });
   }
 
   // MCP tools (auto-discovered from connected servers)
@@ -92,9 +83,18 @@ export async function* runAgentLoopStreaming(
   const retrieval = await autoRetrieve(userMessage, channel);
   const retrievalSection = buildRetrievalPrompt(retrieval);
 
-  const systemPrompt = [getBaseSystemPrompt(), memorySection, retrievalSection, capabilitiesSection]
-    .filter(Boolean)
-    .join('\n\n');
+  const cronSection = context.from === 'cron'
+    ? '## Mode tâche automatique\nTu exécutes une tâche planifiée. Agis directement sans commenter tes intentions. Pas de "Bien sûr", "Je vais", "Je m\'apprête à" — exécute et rapporte le résultat uniquement.'
+    : '';
+
+  // Stable block (base prompt + capabilities) → cacheable
+  // Dynamic block (cron + memory + retrieval) → not cached
+  const stableText = [getBaseSystemPrompt(), capabilitiesSection].filter(Boolean).join('\n\n');
+  const dynamicText = [cronSection, memorySection, retrievalSection].filter(Boolean).join('\n\n');
+  const systemBlocks = [
+    ...(stableText ? [{ type: 'text' as const, text: stableText, cache_control: { type: 'ephemeral' as const } }] : []),
+    ...(dynamicText ? [{ type: 'text' as const, text: dynamicText }] : []),
+  ];
 
   const sqliteHistory = memCtx.recentMessages;
   const historyToUse = sqliteHistory.length > 0 ? sqliteHistory : (context.history ?? []);
@@ -121,7 +121,7 @@ export async function* runAgentLoopStreaming(
       const streamResult = await llm.stream({
         taskType: ((context.taskType ?? 'conversation') as TaskType),
         messages,
-        system: systemPrompt,
+        systemBlocks,
         tools: anthropicTools,
         model: context.model,
         channel,

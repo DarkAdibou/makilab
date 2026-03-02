@@ -7,10 +7,18 @@ import { logger } from '../logger.ts';
 
 export type { TaskType } from './router.ts';
 
+export interface SystemBlock {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}
+
 export interface LlmRequest {
   taskType: TaskType;
   messages: Anthropic.MessageParam[];
   system?: string;
+  /** Structured system prompt blocks with optional cache_control (Anthropic only). */
+  systemBlocks?: SystemBlock[];
   tools?: Anthropic.Tool[];
   maxTokens?: number;
   model?: string;
@@ -425,7 +433,10 @@ function trackUsage(
 // ============================================================
 
 export function createLlmClient(): LlmClient {
-  const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
+  const anthropic = new Anthropic({
+    apiKey: config.anthropicApiKey,
+    defaultHeaders: { 'anthropic-beta': 'prompt-caching-2024-07-31' },
+  });
 
   return {
     async chat(request: LlmRequest): Promise<LlmResponse> {
@@ -433,8 +444,13 @@ export function createLlmClient(): LlmClient {
       const maxTokens = request.maxTokens ?? 4096;
       const start = Date.now();
 
+      // For OpenRouter, flatten systemBlocks to a plain string
+      const systemForOr = request.systemBlocks
+        ? request.systemBlocks.map(b => b.text).filter(Boolean).join('\n\n')
+        : request.system;
+
       if (route.provider === 'openrouter') {
-        const result = await callOpenRouter(route.model, request.messages, request.system, maxTokens, request.tools);
+        const result = await callOpenRouter(route.model, request.messages, systemForOr, maxTokens, request.tools);
         const durationMs = Date.now() - start;
         const usage = trackUsage(
           route.provider, route.model, request.taskType,
@@ -449,7 +465,11 @@ export function createLlmClient(): LlmClient {
         max_tokens: maxTokens,
         messages: request.messages,
       };
-      if (request.system) params.system = request.system;
+      if (request.systemBlocks && request.systemBlocks.length > 0) {
+        params.system = request.systemBlocks as unknown as Anthropic.TextBlockParam[];
+      } else if (request.system) {
+        params.system = request.system;
+      }
       if (request.tools && request.tools.length > 0) params.tools = request.tools;
 
       const response = await anthropic.messages.create(params);
@@ -468,9 +488,14 @@ export function createLlmClient(): LlmClient {
       const maxTokens = request.maxTokens ?? 4096;
       const start = Date.now();
 
+      // For OpenRouter, flatten systemBlocks to a plain string
+      const systemForOrStream = request.systemBlocks
+        ? request.systemBlocks.map(b => b.text).filter(Boolean).join('\n\n')
+        : request.system;
+
       if (route.provider === 'openrouter') {
         // OpenRouter streaming: wrap SSE into Anthropic-like events
-        const orStream = streamOpenRouter(route.model, request.messages, request.system, maxTokens, request.tools);
+        const orStream = streamOpenRouter(route.model, request.messages, systemForOrStream, maxTokens, request.tools);
 
         let totalInputTokens = 0;
         let totalOutputTokens = 0;
@@ -624,7 +649,11 @@ export function createLlmClient(): LlmClient {
         messages: request.messages,
         stream: true,
       };
-      if (request.system) params.system = request.system;
+      if (request.systemBlocks && request.systemBlocks.length > 0) {
+        params.system = request.systemBlocks as unknown as Anthropic.TextBlockParam[];
+      } else if (request.system) {
+        params.system = request.system;
+      }
       if (request.tools && request.tools.length > 0) params.tools = request.tools;
 
       const messageStream = anthropic.messages.stream(params);

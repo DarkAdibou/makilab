@@ -14,6 +14,7 @@ import type { SearchResult } from './qdrant.ts';
 import { getMemorySettings, logMemoryRetrieval } from './sqlite.ts';
 import type { MemorySettings } from './sqlite.ts';
 import { config } from '../config.ts';
+import { isTrivialMessage } from '../utils/message-filter.ts';
 import { logger } from '../logger.ts';
 
 export interface RetrievedMemory {
@@ -217,6 +218,9 @@ export async function autoRetrieve(userMessage: string, channel: string): Promis
   try {
     const settings = getMemorySettings();
     if (!settings.auto_retrieve_enabled) return EMPTY_RESULT;
+
+    // Skip embedding call for trivial messages (saves Voyage AI tokens)
+    if (isTrivialMessage(userMessage)) return EMPTY_RESULT;
 
     const result: RetrievalResult = { qdrantMemories: [], obsidianNotes: [] };
 

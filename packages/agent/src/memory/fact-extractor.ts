@@ -22,6 +22,7 @@
 import { setFact, getCoreMemory } from './sqlite.ts';
 import { indexFact } from './semantic-indexer.ts';
 import { createLlmClient } from '../llm/client.ts';
+import { isTrivialMessage } from '../utils/message-filter.ts';
 import { logger } from '../logger.ts';
 
 const llm = createLlmClient();
@@ -53,6 +54,9 @@ export async function extractAndSaveFacts(
   channel: string,
   toolResults?: string[],
 ): Promise<void> {
+  // Skip trivial messages that can't contain durable facts
+  if (isTrivialMessage(userMessage)) return;
+
   try {
     const existingFacts = getCoreMemory();
     const existingFactsStr = Object.entries(existingFacts)

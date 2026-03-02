@@ -61,11 +61,7 @@ export type SubAgentName =
   | 'memory'
   | 'code'
   | 'settings'
-  | 'whatsapp'
-  | 'indeed'
-  | 'notebooklm'
-  | 'calendar'
-  | 'drive';
+  | 'whatsapp';
 
 export interface SubAgentResult {
   success: boolean;

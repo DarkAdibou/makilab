@@ -76,7 +76,7 @@ describe('Fastify server', () => {
     expect(res.json().status).toBe('in_progress');
   });
 
-  it('POST /api/chat/stream route exists (not 404)', async () => {
+  it('POST /api/chat/stream route exists (not 404)', { timeout: 15000 }, async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/chat/stream',

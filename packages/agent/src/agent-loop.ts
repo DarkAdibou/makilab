@@ -25,7 +25,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.ts';
-import { findTool, tools as legacyTools } from './tools/index.ts';
+import { findTool } from './tools/index.ts';
 import { getAllSubAgents, findSubAgent, buildCapabilitiesPrompt } from './subagents/registry.ts';
 import {
   loadMemoryContext,
@@ -61,7 +61,7 @@ function getBaseSystemPrompt(): string {
   return getAgentPrompt();
 }
 
-/** Build the full tool list: subagent actions + legacy tools */
+/** Build the full tool list: subagent actions + MCP tools */
 function buildToolList(): Anthropic.Tool[] {
   const anthropicTools: Anthropic.Tool[] = [];
 
@@ -74,17 +74,6 @@ function buildToolList(): Anthropic.Tool[] {
         input_schema: action.inputSchema,
       });
     }
-  }
-
-  // Legacy tools (kept during transition, will be removed in E4)
-  for (const t of legacyTools) {
-    // Skip get_time — now handled by the time subagent
-    if (t.name === 'get_time') continue;
-    anthropicTools.push({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema,
-    });
   }
 
   // MCP tools (auto-discovered from connected servers)
@@ -160,9 +149,15 @@ export async function runAgentLoop(
     ? '## Mode tâche automatique\nTu exécutes une tâche planifiée. Agis directement sans commenter tes intentions. Pas de "Bien sûr", "Je vais", "Je m\'apprête à" — exécute et rapporte le résultat uniquement.'
     : '';
 
-  const systemPrompt = [getBaseSystemPrompt(), cronSection, memorySection, retrievalSection, capabilitiesSection]
-    .filter(Boolean)
-    .join('\n\n');
+  // Build system prompt as blocks for prompt caching:
+  // - Stable block (base prompt + capabilities) → cache_control: ephemeral
+  // - Dynamic block (cron + memory + retrieval) → no cache
+  const stableText = [getBaseSystemPrompt(), capabilitiesSection].filter(Boolean).join('\n\n');
+  const dynamicText = [cronSection, memorySection, retrievalSection].filter(Boolean).join('\n\n');
+  const systemBlocks = [
+    ...(stableText ? [{ type: 'text' as const, text: stableText, cache_control: { type: 'ephemeral' as const } }] : []),
+    ...(dynamicText ? [{ type: 'text' as const, text: dynamicText }] : []),
+  ];
 
   // Use SQLite history (T1), fall back to context.history if empty (first run)
   const sqliteHistory = memCtx.recentMessages;
@@ -188,7 +183,7 @@ export async function runAgentLoop(
     const response = await llm.chat({
       taskType: ((context.taskType ?? 'conversation') as TaskType),
       messages,
-      system: systemPrompt,
+      systemBlocks,
       tools: anthropicTools,
       model: context.model,
       channel,
