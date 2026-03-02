@@ -30,6 +30,7 @@ import { homeassistantSubAgent } from './homeassistant.ts';
 import { memorySubAgent } from './memory.ts';
 import { codeSubAgent } from './code.ts';
 import { settingsSubAgent } from './settings.ts';
+import { whatsappSubAgent } from './whatsapp.ts';
 
 /** All registered subagents — add new ones here */
 const SUBAGENTS: SubAgent[] = [
@@ -44,6 +45,7 @@ const SUBAGENTS: SubAgent[] = [
   ...(config.qdrantUrl && config.voyageApiKey ? [memorySubAgent] : []),
   codeSubAgent,
   settingsSubAgent,
+  ...(config.whatsappAllowedNumber ? [whatsappSubAgent] : []),
 ];
 
 /** Get a subagent by name — returns undefined if not registered */

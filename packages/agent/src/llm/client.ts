@@ -514,8 +514,9 @@ export function createLlmClient(): LlmClient {
               finishReason = chunk.choices[0].finish_reason;
             }
             if (chunk?.usage) {
-              totalInputTokens = chunk.usage.prompt_tokens;
-              totalOutputTokens = chunk.usage.completion_tokens;
+              // Guard: intermediate chunks from some providers (e.g. Gemini Flash) send 0/undefined
+              if ((chunk.usage.prompt_tokens ?? 0) > 0) totalInputTokens = chunk.usage.prompt_tokens;
+              if ((chunk.usage.completion_tokens ?? 0) > 0) totalOutputTokens = chunk.usage.completion_tokens;
             }
 
             eventBuffer.push(event);

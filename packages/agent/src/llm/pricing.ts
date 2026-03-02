@@ -11,6 +11,7 @@ export function getModelPrice(model: string): { input: number; output: number } 
 export function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
   const price = getModelPrice(model);
   if (!price) return 0;
+  if (!tokensIn || tokensIn < 0 || !tokensOut || tokensOut < 0) return 0;
   return (tokensIn * price.input + tokensOut * price.output) / 1_000_000;
 }
 

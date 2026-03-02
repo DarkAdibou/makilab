@@ -192,9 +192,8 @@ export class WhatsAppSessionManager {
 
       for (const msg of messages) {
         if (!msg.message) continue;
-        // Baileys v6 LID: self-messages (to own number) have fromMe=true
-        // Skip only messages sent to other contacts
-        if (msg.key.fromMe && msg.key.remoteJid !== this.allowedNumber) continue;
+        // Skip all outgoing messages (fromMe=true) — bot's own replies would re-trigger the loop
+        if (msg.key.fromMe) continue;
 
         // Dedup: Baileys fires duplicate events with slightly different timestamps
         // Use 30s time window + text/audio content as dedup key

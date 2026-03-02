@@ -61,6 +61,7 @@ export type SubAgentName =
   | 'memory'
   | 'code'
   | 'settings'
+  | 'whatsapp'
   | 'indeed'
   | 'notebooklm'
   | 'calendar'

@@ -27,6 +27,12 @@ import { notifyCronResult, notifyTaskFailure, notifyCatalogUpdate } from '../not
 
 const dynamicJobs = new Map<string, ScheduledTask>();
 
+/** Redirect messaging channels to mission_control for CRON tasks to avoid polluting chats */
+function safeCronChannel(channel: string): Channel {
+  const messagingChannels = ['whatsapp', 'gmail', 'raycast'];
+  return messagingChannels.includes(channel) ? 'mission_control' : channel as Channel;
+}
+
 /** Dispatch a message to additional notification channels */
 async function dispatchToChannels(reply: string, taskChannel: string, notifyChannels: string[], taskTitle: string): Promise<void> {
   for (const ch of notifyChannels) {
@@ -154,7 +160,7 @@ export function startCron(): void {
         const start = Date.now();
         try {
           const { reply } = await runAgentLoop(task.cron_prompt!, {
-            channel: (task.channel as Channel) ?? 'cli',
+            channel: safeCronChannel(task.channel ?? 'cli'),
             from: 'cron',
             history: [],
             model: task.model ?? undefined,
@@ -204,7 +210,7 @@ export function syncRecurringTasks(): void {
         const start = Date.now();
         try {
           const { reply } = await runAgentLoop(task.cron_prompt!, {
-            channel: (task.channel as Channel) ?? 'cli',
+            channel: safeCronChannel(task.channel ?? 'cli'),
             from: 'cron',
             history: [],
             model: task.model ?? undefined,
@@ -256,7 +262,7 @@ export async function executeRecurringTask(task: { id: string; title?: string; c
   const start = Date.now();
   try {
     const { reply } = await runAgentLoop(task.cron_prompt, {
-      channel: (task.channel as Channel) ?? 'cli',
+      channel: safeCronChannel(task.channel ?? 'cli'),
       from: 'cron',
       history: [],
       model: task.model ?? undefined,
