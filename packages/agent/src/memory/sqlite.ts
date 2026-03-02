@@ -27,8 +27,9 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 // Store DB in monorepo root (never inside a package)
+// Override with MAKILAB_DB_PATH for test isolation
 const rootDir = resolve(fileURLToPath(import.meta.url), '../../../..');
-const DB_PATH = resolve(rootDir, 'makilab.db');
+const DB_PATH = process.env['MAKILAB_DB_PATH'] || resolve(rootDir, 'makilab.db');
 
 let db: DatabaseSync | null = null;
 
@@ -686,6 +687,7 @@ export function getRecentMessages(
   if (channel === 'all') {
     const rows = db.prepare(`
       SELECT role, content, channel FROM messages
+      WHERE channel NOT LIKE 'fts-test%'
       ORDER BY id DESC
       LIMIT ?
     `).all(limit) as Array<{ role: string; content: string; channel: string }>;
