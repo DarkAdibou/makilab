@@ -1011,9 +1011,15 @@ export function listRecurringTasks(): TaskRow[] {
 }
 
 /** List all tasks with cron_expression (enabled or not) */
-export function listAllRecurringTasks(): TaskRow[] {
-  const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_expression IS NOT NULL ORDER BY created_at DESC');
+/** List all agent-managed tasks: recurring (cron_expression) + one-shot scheduled (cron_prompt) */
+export function listAllAgentTasks(): TaskRow[] {
+  const stmt = getDb().prepare('SELECT * FROM tasks WHERE cron_expression IS NOT NULL OR cron_prompt IS NOT NULL ORDER BY created_at DESC');
   return [...stmt.all()] as unknown as TaskRow[];
+}
+
+/** @deprecated Use listAllAgentTasks instead */
+export function listAllRecurringTasks(): TaskRow[] {
+  return listAllAgentTasks();
 }
 
 /** List one-shot scheduled tasks that are due (due_at <= now, no cron_expression, status pending, has cron_prompt) */

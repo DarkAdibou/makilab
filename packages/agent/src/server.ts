@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllRecurringTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages } from './memory/sqlite.ts';
 import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
@@ -55,9 +55,9 @@ export async function buildServer() {
     return getUniqueTags();
   });
 
-  // GET /api/tasks/recurring — list recurring tasks with stats
+  // GET /api/tasks/recurring — list agent-managed tasks (recurring + one-shot scheduled) with stats
   app.get('/api/tasks/recurring', async () => {
-    const tasks = listAllRecurringTasks();
+    const tasks = listAllAgentTasks();
     return tasks.map((t) => {
       const stats = getTaskExecutionStats(t.id);
       const monthlyCost = getTaskMonthlyCost(t.id);

@@ -15,7 +15,7 @@ const SECTIONS = [
     items: [
       { href: '/chat', label: 'Chat', icon: '\u{1F4AC}' },
       { href: '/todo', label: 'Todo', icon: '\u{2705}' },
-      { href: '/tasks', label: 'Taches', icon: '\u{1F504}' },
+      { href: '/tasks', label: 'Taches agent', icon: '\u{1F504}' },
       { href: '/connections', label: 'Connections', icon: '\u{1F50C}' },
       { href: '/costs', label: 'Costs', icon: '\u{1F4B0}' },
       { href: '/models', label: 'Models', icon: '\u{1F916}' },

@@ -15,8 +15,8 @@ export default function TodoPage() {
 
   useEffect(() => {
     fetchTasks(200).then(all => {
-      // Exclude recurring tasks — those belong in /tasks
-      setTasks(all.filter(t => !t.cron_enabled));
+      // Exclude automated tasks — recurring (cron_expression) and one-shot scheduled (cron_prompt) belong in /tasks
+      setTasks(all.filter(t => !t.cron_expression && !t.cron_prompt));
     }).catch(console.error);
   }, []);
 
@@ -34,7 +34,7 @@ export default function TodoPage() {
   }, [tasks, filters]);
 
   function handleCreated(task: TaskInfo) {
-    if (!task.cron_enabled) setTasks(prev => [task, ...prev]);
+    if (!task.cron_expression && !task.cron_prompt) setTasks(prev => [task, ...prev]);
   }
 
   function handleUpdated(updated: TaskInfo) {

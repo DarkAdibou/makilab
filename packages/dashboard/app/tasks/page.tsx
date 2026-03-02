@@ -148,11 +148,24 @@ function CronEditor({ value, onChange }: { value: string; onChange: (cron: strin
 }
 
 function StatusBadge({ task }: { task: RecurringTaskInfo }) {
+  // One-shot scheduled task
+  if (!task.cron_expression && task.cron_prompt) {
+    if (task.status === 'done') return <span className="badge badge-success">Termine</span>;
+    if (task.status === 'failed') return <span className="badge" style={{ background: '#ef4444', color: 'white' }}>Echoue</span>;
+    if (task.status === 'in_progress') return <span className="badge" style={{ background: '#f59e0b', color: 'white' }}>En cours</span>;
+    return <span className="badge badge-muted">Planifie</span>;
+  }
+  // Recurring task
   if (!task.cron_enabled) return <span className="badge badge-muted">Pause</span>;
   if (task.stats.errorCount > 0 && task.stats.lastRun) {
     return <span className="badge" style={{ background: '#ef4444', color: 'white' }}>Erreur</span>;
   }
   return <span className="badge badge-success">Actif</span>;
+}
+
+function TypeBadge({ task }: { task: RecurringTaskInfo }) {
+  if (task.cron_expression) return <span className="badge badge-outline" style={{ fontSize: '0.625rem' }}>Recurrent</span>;
+  return <span className="badge badge-outline" style={{ fontSize: '0.625rem' }}>One-shot</span>;
 }
 
 export default function RecurringTasksPage() {
@@ -246,17 +259,17 @@ export default function RecurringTasksPage() {
   return (
     <div className="tasks-container">
       <div className="tasks-header">
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>Taches recurrentes</h1>
-        <span className="badge badge-muted">{tasks.length} automation{tasks.length !== 1 ? 's' : ''}</span>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>Taches agent</h1>
+        <span className="badge badge-muted">{tasks.length} tache{tasks.length !== 1 ? 's' : ''}</span>
       </div>
 
       {loading ? (
         <p style={{ color: 'var(--muted-foreground)' }}>Chargement...</p>
       ) : tasks.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-          <p style={{ color: 'var(--muted-foreground)' }}>Aucune tache recurrente configuree.</p>
+          <p style={{ color: 'var(--muted-foreground)' }}>Aucune tache agent configuree.</p>
           <p style={{ color: 'var(--muted-foreground)', fontSize: '0.875rem' }}>
-            Creez une tache avec un cron_expression via le Chat ou l&apos;API.
+            Demandez a l&apos;agent de planifier une tache via le Chat ou WhatsApp.
           </p>
         </div>
       ) : (
@@ -265,11 +278,11 @@ export default function RecurringTasksPage() {
             <thead>
               <tr>
                 <th>Nom</th>
+                <th>Type</th>
                 <th>Frequence</th>
                 <th>Statut</th>
                 <th>Prochaine exec.</th>
                 <th>Derniere exec.</th>
-                <th>Cout/mois</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -283,22 +296,28 @@ export default function RecurringTasksPage() {
                   <td>
                     <span className="recurring-title">{task.title}</span>
                   </td>
+                  <td><TypeBadge task={task} /></td>
                   <td>
-                    <span className="badge badge-cron" style={{ fontSize: '0.6875rem' }}>
-                      {task.cron_expression ? humanCron(task.cron_expression) : '-'}
-                    </span>
+                    {task.cron_expression ? (
+                      <span className="badge badge-cron" style={{ fontSize: '0.6875rem' }}>
+                        {humanCron(task.cron_expression)}
+                      </span>
+                    ) : task.due_at ? (
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>
+                        {new Date(task.due_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td><StatusBadge task={task} /></td>
                   <td style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>
-                    {task.stats.nextRun
+                    {task.cron_expression && task.stats.nextRun
                       ? new Date(task.stats.nextRun).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                      : '-'}
+                      : !task.cron_expression && task.due_at && task.status !== 'done'
+                        ? new Date(task.due_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : '-'}
                   </td>
                   <td style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>
                     {relativeTime(task.stats.lastRun)}
-                  </td>
-                  <td style={{ fontSize: '0.8125rem' }}>
-                    {formatCost(task.stats.monthlyCost)}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
@@ -313,14 +332,16 @@ export default function RecurringTasksPage() {
                           <span className="chat-tool-spinner" />
                         ) : '\u25B6\uFE0F'}
                       </button>
-                      <label className="toggle-switch" title={task.cron_enabled ? 'Mettre en pause' : 'Activer'}>
-                        <input
-                          type="checkbox"
-                          checked={!!task.cron_enabled}
-                          onChange={() => handleToggle(task)}
-                        />
-                        <span className="toggle-slider" />
-                      </label>
+                      {task.cron_expression && (
+                        <label className="toggle-switch" title={task.cron_enabled ? 'Mettre en pause' : 'Activer'}>
+                          <input
+                            type="checkbox"
+                            checked={!!task.cron_enabled}
+                            onChange={() => handleToggle(task)}
+                          />
+                          <span className="toggle-slider" />
+                        </label>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -366,27 +387,43 @@ export default function RecurringTasksPage() {
               {/* Configuration */}
               <label className="detail-label">Configuration</label>
               <div className="detail-cron-section">
-                <div className="detail-cron-toggle">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={!!selectedTask.cron_enabled}
-                      onChange={() => handleToggle(selectedTask)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
-                  <span>{selectedTask.cron_enabled ? 'Active' : 'En pause'}</span>
-                </div>
+                {selectedTask.cron_expression ? (
+                  <>
+                    <div className="detail-cron-toggle">
+                      <label className="toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedTask.cron_enabled}
+                          onChange={() => handleToggle(selectedTask)}
+                        />
+                        <span className="toggle-slider" />
+                      </label>
+                      <span>{selectedTask.cron_enabled ? 'Active' : 'En pause'}</span>
+                    </div>
 
-                <CronEditor
-                  value={editingCron}
-                  onChange={(cron) => {
-                    setEditingCron(cron);
-                    if (cron !== (selectedTask.cron_expression ?? '')) {
-                      saveCronDirect(cron);
-                    }
-                  }}
-                />
+                    <CronEditor
+                      value={editingCron}
+                      onChange={(cron) => {
+                        setEditingCron(cron);
+                        if (cron !== (selectedTask.cron_expression ?? '')) {
+                          saveCronDirect(cron);
+                        }
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div className="detail-cron-info">
+                    <span className="detail-label" style={{ marginTop: 0 }}>Execution prevue</span>
+                    <span style={{ fontSize: '0.875rem' }}>
+                      {selectedTask.due_at
+                        ? new Date(selectedTask.due_at).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                        : 'Non planifiee'}
+                    </span>
+                    <span className="badge badge-outline" style={{ fontSize: '0.625rem', marginTop: 4, alignSelf: 'flex-start' }}>
+                      Tache ponctuelle
+                    </span>
+                  </div>
+                )}
 
                 <div className="detail-cron-info">
                   <span className="detail-label" style={{ marginTop: 0 }}>Modèle LLM</span>

@@ -27,13 +27,16 @@ import {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys';
+import type { WAMessage } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { resolve } from 'node:path';
 import { exec } from 'node:child_process';
 import type { IncomingMessage, OutgoingMessage } from '@makilab/shared';
+import { transcribeAudio } from './transcriber.ts';
 
 export type MessageHandler = (msg: IncomingMessage) => Promise<OutgoingMessage>;
 export type StatusHandler = (status: ConnectionStatus) => void;
@@ -187,11 +190,12 @@ export class WhatsAppSessionManager {
         if (msg.key.fromMe && msg.key.remoteJid !== this.allowedNumber) continue;
 
         // Dedup: Baileys fires duplicate events with slightly different timestamps
-        // Use 30s time window + text content as dedup key
+        // Use 30s time window + text/audio content as dedup key
         const ts = msg.messageTimestamp as number;
         const tsBucket = Math.floor(ts / 30); // 30-second window
         const textPreview = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').slice(0, 50);
-        const dedupKey = `${tsBucket}:${textPreview}`;
+        const audioId = msg.message.audioMessage ? `audio:${msg.key.id}` : '';
+        const dedupKey = `${tsBucket}:${textPreview || audioId}`;
         if (this.recentMessageIds.has(dedupKey) || this.processingMessages.has(dedupKey)) {
           console.log(`🔁 Message dupliqué ignoré: "${textPreview.substring(0, 30)}..."`);
           continue;
@@ -211,12 +215,42 @@ export class WhatsAppSessionManager {
           return;
         }
 
-        const text =
+        // Extract text — handle audio messages via Whisper transcription
+        let text =
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
           '';
 
-        if (!text.trim()) continue;
+        if (!text.trim()) {
+          // Check for audio/voice message
+          const audioMsg = msg.message.audioMessage;
+          if (audioMsg) {
+            console.log('🎙️ Message vocal détecté, transcription en cours...');
+            try {
+              const buffer = await downloadMediaMessage(msg as WAMessage, 'buffer', {});
+              const mimetype = audioMsg.mimetype || 'audio/ogg';
+              const transcribed = await transcribeAudio(buffer as Buffer, mimetype);
+              if (transcribed) {
+                text = transcribed;
+                console.log(`🎙️ Transcription: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
+              } else {
+                const errorTo = this.replyJid ?? from;
+                await this.sock!.sendMessage(errorTo, { text: '🎙️ Désolé, je n\'ai pas pu transcrire ce message vocal.' });
+                this.processingMessages.delete(dedupKey);
+                continue;
+              }
+            } catch (err) {
+              console.error('❌ Erreur téléchargement audio:', err);
+              const errorTo = this.replyJid ?? from;
+              await this.sock!.sendMessage(errorTo, { text: '🎙️ Erreur lors de la transcription du message vocal.' });
+              this.processingMessages.delete(dedupKey);
+              continue;
+            }
+          } else {
+            this.processingMessages.delete(dedupKey);
+            continue;
+          }
+        }
 
         this.state.messagesCount++;
         const timestamp = new Date((msg.messageTimestamp as number) * 1000);

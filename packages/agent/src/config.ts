@@ -56,6 +56,9 @@ export const config = {
   qdrantUrl: optional('QDRANT_URL', ''),
   voyageApiKey: optional('VOYAGE_API_KEY', ''),
 
+  // OpenAI Whisper — audio transcription for WhatsApp voice messages
+  openaiApiKey: optional('OPENAI_API_KEY', ''),
+
   // SearXNG (E18) — self-hosted search, replaces Brave as primary
   searxngUrl: optional('SEARXNG_URL', ''),
 
@@ -89,6 +92,7 @@ export function validateConfig(log: { fatal: (obj: object, msg: string) => void;
   if (!process.env['HA_URL']) optionalWarnings.push('HA_URL (home assistant disabled)');
   if (!process.env['QDRANT_URL']) optionalWarnings.push('QDRANT_URL (semantic memory disabled)');
   if (!process.env['VOYAGE_API_KEY']) optionalWarnings.push('VOYAGE_API_KEY (semantic memory disabled)');
+  if (!process.env['OPENAI_API_KEY']) optionalWarnings.push('OPENAI_API_KEY (whisper transcription disabled)');
 
   for (const w of optionalWarnings) {
     log.warn({ missing: w }, 'Optional env var not set');
