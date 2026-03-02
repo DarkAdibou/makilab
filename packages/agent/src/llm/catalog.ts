@@ -27,6 +27,7 @@ export async function refreshCatalog(): Promise<number> {
 
   const data = await res.json() as { data: Array<{
     id: string; name: string; context_length: number;
+    description?: string;
     architecture?: { modality?: string };
     pricing: { prompt: string; completion: string };
     supported_parameters?: string[];
@@ -51,6 +52,7 @@ export async function refreshCatalog(): Promise<number> {
       supports_tools: params.includes('tools') ? 1 : 0,
       supports_reasoning: params.includes('reasoning') ? 1 : 0,
       modality: m.architecture?.modality ?? 'text->text',
+      description: m.description ?? null,
       updated_at: '',
     });
     count++;

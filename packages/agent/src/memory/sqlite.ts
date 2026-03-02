@@ -153,6 +153,8 @@ function initSchema(db: DatabaseSync): void {
   migrateMemoryRetrievals(db);
   migrateFts5Messages(db);
   migrateTasksAddNotifyChannels(db);
+  migrateLlmModelsAddDescription(db);
+  migrateAddDeepSearchRoute(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -636,6 +638,32 @@ function migrateTasksAddNotifyChannels(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('tasks_add_notify_channels')").run();
 }
 
+function migrateAddDeepSearchRoute(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_deep_search_route'"
+  ).get();
+  if (existing) return;
+
+  db.prepare("INSERT OR IGNORE INTO llm_route_config (task_type, model_id) VALUES ('deep_search', 'perplexity/sonar-pro')").run();
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_deep_search_route')").run();
+}
+
+function migrateLlmModelsAddDescription(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'llm_models_add_description'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='llm_models'"
+  ).get() as { sql: string } | undefined);
+
+  if (!schema?.sql.includes('description')) {
+    db.exec("ALTER TABLE llm_models ADD COLUMN description TEXT");
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES ('llm_models_add_description')").run();
+}
+
 // ============================================================
 // Core Memory (durable facts)
 // ============================================================
@@ -820,6 +848,7 @@ export interface LlmModelRow {
   supports_tools: number;
   supports_reasoning: number;
   modality: string;
+  description?: string | null;
   updated_at: string;
 }
 
@@ -1366,14 +1395,14 @@ export function getLlmUsageHistory(days = 30): Array<{ date: string; cost: numbe
 
 export function upsertLlmModel(model: LlmModelRow): void {
   getDb().prepare(`
-    INSERT INTO llm_models (id, name, provider_slug, context_length, price_input_per_m, price_output_per_m, supports_tools, supports_reasoning, modality, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO llm_models (id, name, provider_slug, context_length, price_input_per_m, price_output_per_m, supports_tools, supports_reasoning, modality, description, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name, provider_slug = excluded.provider_slug, context_length = excluded.context_length,
       price_input_per_m = excluded.price_input_per_m, price_output_per_m = excluded.price_output_per_m,
       supports_tools = excluded.supports_tools, supports_reasoning = excluded.supports_reasoning,
-      modality = excluded.modality, updated_at = datetime('now')
-  `).run(model.id, model.name, model.provider_slug, model.context_length, model.price_input_per_m, model.price_output_per_m, model.supports_tools, model.supports_reasoning, model.modality);
+      modality = excluded.modality, description = excluded.description, updated_at = datetime('now')
+  `).run(model.id, model.name, model.provider_slug, model.context_length, model.price_input_per_m, model.price_output_per_m, model.supports_tools, model.supports_reasoning, model.modality, model.description ?? null);
 }
 
 export function getLlmModels(filters?: { tools?: boolean; minContext?: number; provider?: string }): LlmModelRow[] {

@@ -376,6 +376,7 @@ export interface CatalogModel {
   supports_tools: number;
   supports_reasoning: number;
   modality: string;
+  description?: string | null;
 }
 
 export interface RouteWithSuggestions {

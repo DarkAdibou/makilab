@@ -313,7 +313,6 @@ async function* streamOpenRouter(
     messages: orMessages,
     max_tokens: maxTokens,
     stream: true,
-    stream_options: { include_usage: true },
   };
   if (tools && tools.length > 0 && modelSupportsTools(orModel)) {
     body.tools = convertTools(tools);
@@ -364,8 +363,8 @@ async function* streamOpenRouter(
       const delta = chunk.choices?.[0]?.delta;
       if (!delta) continue;
 
-      // Text content delta
-      if (delta.content) {
+      // Text content delta (check != null to handle empty string "" correctly)
+      if (delta.content != null && delta.content !== '') {
         yield {
           event: {
             type: 'content_block_delta',
@@ -544,6 +543,42 @@ export function createLlmClient(): LlmClient {
           stream: asyncIterable,
           finalMessage: async () => {
             await pumpPromise;
+
+            // Fallback: if stream produced no text and no tool calls, retry non-streaming
+            if (!currentText && toolCallBuilders.size === 0) {
+              logger.warn({ model: route.model }, 'OpenRouter stream produced no content, falling back to non-streaming');
+              const fallback = await callOpenRouter(route.model, request.messages, request.system, maxTokens, request.tools);
+              totalInputTokens = fallback.inputTokens;
+              totalOutputTokens = fallback.outputTokens;
+              const durationMs = Date.now() - start;
+              const usage = trackUsage(
+                route.provider, route.model, request.taskType,
+                totalInputTokens, totalOutputTokens, durationMs,
+                request.channel, request.taskId,
+              );
+              // Inject fallback text as a text_delta event so the stream consumer gets it
+              const textBlock = fallback.content.find(b => b.type === 'text') as Anthropic.TextBlock | undefined;
+              if (textBlock?.text) {
+                currentText = textBlock.text;
+                eventBuffer.push({
+                  type: 'content_block_delta',
+                  index: 0,
+                  delta: { type: 'text_delta', text: textBlock.text },
+                } as Anthropic.RawMessageStreamEvent);
+              }
+              const message: Anthropic.Message = {
+                id: 'msg_openrouter',
+                type: 'message',
+                role: 'assistant',
+                content: fallback.content,
+                model: toAnthropicModel(route.model),
+                stop_reason: fallback.stopReason as Anthropic.Message['stop_reason'],
+                stop_sequence: null,
+                usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+              };
+              return { message, usage };
+            }
+
             const durationMs = Date.now() - start;
             const usage = trackUsage(
               route.provider, route.model, request.taskType,

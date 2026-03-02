@@ -1,7 +1,7 @@
 import { config } from '../config.ts';
 import { getRouteForTaskType, getMemorySettings } from '../memory/sqlite.ts';
 
-export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_task' | 'orchestration';
+export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_task' | 'orchestration' | 'deep_search';
 
 interface ModelRoute {
   provider: 'anthropic' | 'openrouter';
@@ -16,6 +16,7 @@ const FALLBACK_ROUTES: Record<TaskType, ModelRoute> = {
   classification:   { provider: 'openrouter',  model: 'google/gemini-2.0-flash-001' },
   cron_task:        { provider: 'anthropic',   model: 'claude-sonnet-4-6' },
   orchestration:    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
+  deep_search:      { provider: 'openrouter',  model: 'perplexity/sonar-pro' },
 };
 
 /** Cached prefer_openrouter setting (avoid DB reads on every LLM call) */

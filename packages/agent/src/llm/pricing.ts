@@ -15,5 +15,6 @@ export function calculateCost(model: string, tokensIn: number, tokensOut: number
 export function listAvailableModels(): Array<{ id: string; label: string; provider: string }> {
   return getLlmModels({ tools: true })
     .filter(m => m.modality.includes('text'))
-    .map(m => ({ id: m.id, label: m.name, provider: m.provider_slug }));
+    .map(m => ({ id: m.id, label: m.name, provider: m.provider_slug }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }

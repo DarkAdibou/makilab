@@ -12,6 +12,7 @@
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { config } from '../config.ts';
 import { createLlmClient } from '../llm/client.ts';
+import { resolveModel } from '../llm/router.ts';
 
 export const webSubAgent: SubAgent = {
   name: 'web',
@@ -254,19 +255,17 @@ async function fetchUrl(url: string): Promise<SubAgentResult> {
   };
 }
 
-// --- Deep Research via Perplexity Sonar ---
-
-const SONAR_MODEL = 'perplexity/sonar-pro';
+// --- Deep Research (configurable model via llm_route_config) ---
 
 async function deepResearch(query: string): Promise<SubAgentResult> {
   if (!config.openrouterApiKey) {
     return { success: false, text: 'Deep research indisponible (OPENROUTER_API_KEY requis)', error: 'No OpenRouter key' };
   }
 
+  const route = resolveModel('deep_search');
   const llm = createLlmClient();
   const response = await llm.chat({
-    taskType: 'classification',
-    model: SONAR_MODEL,
+    taskType: 'deep_search',
     messages: [{ role: 'user', content: query }],
     system: 'Tu es un assistant de recherche. Fournis une réponse structurée, détaillée et sourcée. Cite tes sources avec des URLs.',
     maxTokens: 4096,
@@ -279,7 +278,7 @@ async function deepResearch(query: string): Promise<SubAgentResult> {
 
   return {
     success: true,
-    text: `Recherche approfondie (Sonar) pour "${query}":\n\n${text}`,
-    data: { model: SONAR_MODEL, tokensIn: response.usage.tokensIn, tokensOut: response.usage.tokensOut },
+    text: `Recherche approfondie (${route.model}) pour "${query}":\n\n${text}`,
+    data: { model: route.model, tokensIn: response.usage.tokensIn, tokensOut: response.usage.tokensOut },
   };
 }
