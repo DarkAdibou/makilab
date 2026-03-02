@@ -58,8 +58,10 @@ export class WhatsAppSessionManager {
 
   // sock exposed for sending messages from other parts of the app (e.g. Mission Control)
   private sock: ReturnType<typeof makeWASocket> | null = null;
-  // Dedup self-messaging (Baileys fires duplicate events)
+  // Dedup: Baileys fires duplicate events (self-messages, reconnections)
   private recentMessageIds = new Set<string>();
+  // Track messages currently being processed to prevent concurrent handling
+  private processingMessages = new Set<string>();
 
   constructor(
     private readonly allowedNumber: string,
@@ -168,12 +170,13 @@ export class WhatsAppSessionManager {
         // Skip only messages sent to other contacts
         if (msg.key.fromMe && msg.key.remoteJid !== this.allowedNumber) continue;
 
-        // Dedup: Baileys fires duplicate events for self-messages (different IDs)
+        // Dedup: Baileys fires duplicate events (self-messages, reconnection replays)
         const ts = msg.messageTimestamp as number;
         const textPreview = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').slice(0, 50);
         const dedupKey = `${ts}:${textPreview}`;
-        if (this.recentMessageIds.has(dedupKey)) continue;
+        if (this.recentMessageIds.has(dedupKey) || this.processingMessages.has(dedupKey)) continue;
         this.recentMessageIds.add(dedupKey);
+        this.processingMessages.add(dedupKey);
         if (this.recentMessageIds.size > 100) {
           const first = this.recentMessageIds.values().next().value!;
           this.recentMessageIds.delete(first);
@@ -218,6 +221,8 @@ export class WhatsAppSessionManager {
           await this.sock!.sendMessage(errorTo, {
             text: '❌ Une erreur est survenue. Réessaie dans un instant.',
           });
+        } finally {
+          this.processingMessages.delete(dedupKey);
         }
       }
     });
