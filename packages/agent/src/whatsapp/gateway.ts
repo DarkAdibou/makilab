@@ -28,14 +28,14 @@ export async function initWhatsApp(): Promise<void> {
         content: m.content,
       }));
 
-      const reply = await runAgentLoop(msg.text, {
+      const result = await runAgentLoop(msg.text, {
         channel: 'whatsapp' as Channel,
         from: msg.from,
         history,
       });
 
       // agent-loop.ts already saves messages to SQLite
-      return { channel: 'whatsapp', to: msg.from, text: reply };
+      return { channel: 'whatsapp', to: msg.from, text: result.reply };
     },
 
     (status) => {

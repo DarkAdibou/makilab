@@ -49,6 +49,13 @@ Même cerveau, mêmes capacités sur tous les canaux.
 - Smart Capture : confidence haute → auto, moyenne → propose, basse → inbox
 - CRON uniquement pour la proactivité (pas de polling continu)
 - Subagents composables : input/output typé, état observable Mission Control
+- Cost-Conscious : minimiser les coûts API à chaque décision
+  - Choisir le modèle le moins cher suffisant pour la tâche (Haiku > Sonnet > Opus)
+  - Optimiser les prompts : system prompt compact, max_tokens ajusté, pas de contexte inutile
+  - Caching API (prompt caching Anthropic, cache résultats MCP/web)
+  - Self-hosting prioritaire : Qdrant, Whisper.cpp, modèles locaux dès que le NUC le permet
+  - Batch via OpenRouter pour les tâches non-interactives (résumés, extraction, classification)
+  - Métriques : tracker tokens in/out par subagent pour identifier les optimisations
 
 ## NUC N150 / CasaOS
 - 8-10GB RAM total, ~4-5GB disponibles pour Makilab

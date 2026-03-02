@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 E16 terminé — Mémoire hybride unifiée ✅
+## Statut global : 🟢 Batch E20 terminé — Costs++, OpenRouter full routing, Sonar deep research ✅
 
 ---
 
@@ -32,6 +32,7 @@
 | E14.5 | Smart Model Catalog + Notifications (catalogue OpenRouter dynamique, moteur notifs) | 🟠 Important | ✅ Terminé |
 | E19 | WhatsApp unifié — fusionner gateway dans Fastify (processus unique) | 🟠 Important | ✅ Terminé |
 | E15 | Migration NUC N150 / CasaOS (production) | 🟢 Long terme | 🔲 Non démarré |
+| E20 | Batch : Costs++, coût/requête badge, OpenRouter full routing + toggle, Sonar deep research, Command Center sync | 🟠 Important | ✅ Terminé |
 
 ---
 
@@ -298,34 +299,55 @@ Plan : `docs/plans/2026-03-02-e16-implementation.md`
 
 ---
 
+## E20 — Batch : Costs++, OpenRouter routing, Sonar, Command Center sync
+
+| Story | Titre | Statut |
+|---|---|---|
+| L20.1 | Command Center sync — visibilitychange re-fetch | ✅ |
+| L20.2 | Costs page — réordonnancement + accordéon contexte + pagination | ✅ |
+| L20.3 | Coût/requête badge — runAgentLoop retourne costUsd, StreamEvent cost, badge chat | ✅ |
+| L20.4 | Sonar deep research — web__deep_research via perplexity/sonar-pro (OpenRouter) | ✅ |
+| L20.5 | OpenRouter full routing — toggle prefer_openrouter (DB + cache 60s) | ✅ |
+| L20.6 | callOpenRouter + streamOpenRouter avec tool calling complet (format OpenAI) | ✅ |
+| L20.7 | Model ID bidirectionnel — toOpenRouterModel + toAnthropicModel | ✅ |
+| L20.8 | modelSupportsTools() — check catalogue avant envoi tools | ✅ |
+| L20.9 | inferProvider() — reconnaît anthropic/claude-* | ✅ |
+| L20.10 | Chat badge model — cost event inclut model résolu, affiché dans badge | ✅ |
+| L20.11 | Kanban drag-and-drop — kanbanCollision pointerWithin + rectIntersection | ✅ |
+| L20.12 | Chat dropdown — synced avec route conversation DB bidirectionnel | ✅ |
+| L20.13 | /settings/llm page + sidebar link | ✅ |
+
+---
+
 ## Dernière session
 
-**Date :** 2026-03-02 (session 5)
+**Date :** 2026-03-02 (session 6)
 **Accompli :**
-- E16 terminé — Mémoire hybride unifiée (7 stories)
-- Auto-retrieval Qdrant : embed message → search sémantique → injection system prompt (max 4 résultats, score > 0.5)
-- Obsidian comme moteur de contexte : notes fixes configurables + tag #makilab dynamique
-- FTS5 full-text search sur messages SQLite (triggers auto-sync)
-- Extraction de faits enrichie (tool results en plus des messages)
-- SubAgent memory étendu : forget (suppression Qdrant + facts) + search_text (FTS5)
-- Dashboard /memory : stats, éditeur de faits, recherche hybride (sémantique/texte), settings configurables
-- 8 API endpoints mémoire + logs de retrieval observables
-- Fix pages /costs et /models (savingsPercent null)
-- Nettoyage kanban (20 tâches test supprimées)
+- E20 terminé — Batch 5 features + fixes OpenRouter
+- OpenRouter full routing : toggle DB, callOpenRouter avec tools (format OpenAI), streamOpenRouter SSE
+- Conversion bidirectionnelle model IDs : `toOpenRouterModel` (claude-sonnet-4-6 → anthropic/claude-sonnet-4.6) + `toAnthropicModel` (inverse)
+- `modelSupportsTools()` : vérifie catalogue SQLite avant envoi tools — évite crash 404 sur modèles sans function calling
+- `inferProvider()` : reconnaît `anthropic/claude-*` comme Anthropic provider
+- Coût/requête badge : `runAgentLoop` retourne `{ reply, costUsd }`, stream émet `cost` event avec model résolu
+- Sonar deep research : action `web__deep_research` via `perplexity/sonar-pro` (conditionnel OPENROUTER_API_KEY)
+- Page /settings/llm avec toggle OpenRouter + lien sidebar
+- Kanban drag-and-drop : custom `kanbanCollision` prioritisant colonnes
+- Chat dropdown synced bidirectionnel avec routes /models
+- Command Center : visibilitychange listener pour re-fetch
 
-**E16 détails :**
-- 3 migrations SQLite : memory_settings (key/value), memory_retrievals (logs), messages_fts (FTS5 virtual table)
-- retriever.ts : autoRetrieve() + buildRetrievalPrompt() + fetchObsidianContextNotes()
-- Agent loops (sync + stream) : auto-retrieval injecté dans system prompt
-- fact-extractor.ts : paramètre toolResults pour enrichir l'extraction
-- qdrant.ts : SearchResult enrichi (id + collection) + deleteByIds()
-- memory subagent : 4 actions (search, index, forget, search_text)
-- Dashboard /memory : 4 sections (stats, facts editor, search, settings avec toggles/sliders)
+**E20 détails :**
+- `packages/agent/src/llm/client.ts` : callOpenRouter + streamOpenRouter complets, conversion Anthropic↔OpenAI tools
+- `packages/agent/src/llm/router.ts` : getPreferOpenRouter() cache 60s, inferProvider() étendu
+- `packages/agent/src/memory/sqlite.ts` : prefer_openrouter dans MemorySettings
+- `packages/agent/src/agent-loop-stream.ts` : cost event avec model résolu
+- `packages/agent/src/agent-loop.ts` : retourne { reply, costUsd }
+- `packages/dashboard/app/settings/llm/page.tsx` : nouveau
+- `packages/dashboard/app/chat/page.tsx` : badge model + coût, dropdown synced routes
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (40+ endpoints)
-- `pnpm dev:dashboard` : Next.js 15 port 3000 (13 pages)
+- `pnpm dev:dashboard` : Next.js 15 port 3000 (14 pages)
 - `pnpm --filter @makilab/agent test` : 118 tests ✅
 - 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
 

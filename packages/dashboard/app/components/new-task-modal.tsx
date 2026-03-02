@@ -1,17 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createTaskApi, type TaskInfo } from '../lib/api';
-
-const TAG_COLORS = [
-  '#5423e7', '#22c55e', '#f59e0b', '#ef4444',
-  '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6',
-];
-
-function tagColor(tag: string): string {
-  let hash = 0;
-  for (let i = 0; i < tag.length; i++) hash = ((hash << 5) - hash + tag.charCodeAt(i)) | 0;
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]!;
-}
+import { tagColor } from '../lib/utils';
 
 interface Props {
   open: boolean;

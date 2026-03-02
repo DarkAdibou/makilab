@@ -1,5 +1,5 @@
 import { config } from '../config.ts';
-import { getRouteForTaskType } from '../memory/sqlite.ts';
+import { getRouteForTaskType, getMemorySettings } from '../memory/sqlite.ts';
 
 export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_task' | 'orchestration';
 
@@ -18,8 +18,27 @@ const FALLBACK_ROUTES: Record<TaskType, ModelRoute> = {
   orchestration:    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
 };
 
+/** Cached prefer_openrouter setting (avoid DB reads on every LLM call) */
+let _preferOpenRouterCache: { value: boolean; ts: number } | null = null;
+const CACHE_TTL_MS = 60_000;
+
+function getPreferOpenRouter(): boolean {
+  const now = Date.now();
+  if (_preferOpenRouterCache && now - _preferOpenRouterCache.ts < CACHE_TTL_MS) {
+    return _preferOpenRouterCache.value;
+  }
+  try {
+    const settings = getMemorySettings();
+    _preferOpenRouterCache = { value: settings.prefer_openrouter, ts: now };
+    return settings.prefer_openrouter;
+  } catch {
+    return false;
+  }
+}
+
 function inferProvider(model: string): 'anthropic' | 'openrouter' {
-  if (model.startsWith('claude-')) return 'anthropic';
+  if (getPreferOpenRouter() && config.openrouterApiKey) return 'openrouter';
+  if (model.startsWith('claude-') || model.startsWith('anthropic/claude-')) return 'anthropic';
   return 'openrouter';
 }
 

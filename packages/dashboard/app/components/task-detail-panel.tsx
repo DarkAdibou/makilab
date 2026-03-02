@@ -1,17 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { updateTaskApi, deleteTaskApi, fetchTags, type TaskInfo } from '../lib/api';
-
-const TAG_COLORS = [
-  '#5423e7', '#22c55e', '#f59e0b', '#ef4444',
-  '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6',
-];
-
-function tagColor(tag: string): string {
-  let hash = 0;
-  for (let i = 0; i < tag.length; i++) hash = ((hash << 5) - hash + tag.charCodeAt(i)) | 0;
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length]!;
-}
+import { tagColor, parseTags } from '../lib/utils';
 
 interface Props {
   task: TaskInfo | null;
@@ -37,7 +27,7 @@ export function TaskDetailPanel({ task, onClose, onUpdated, onDeleted }: Props) 
     setPriority(task.priority);
     setDueAt(task.due_at ?? '');
     setConfirmDelete(false);
-    try { setTags(JSON.parse(task.tags || '[]')); } catch { setTags([]); }
+    setTags(parseTags(task.tags));
   }, [task]);
 
   useEffect(() => {

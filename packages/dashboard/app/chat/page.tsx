@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchMessages, sendMessageStreamWithModel, fetchModels } from '../lib/api';
+import { fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi } from '../lib/api';
 import type { ModelInfo } from '../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   channel?: string;
+  costUsd?: number;
+  model?: string;
 }
 
 interface ToolCall {
@@ -54,6 +56,10 @@ export default function ChatPage() {
   useEffect(() => {
     fetchMessages('all', 50).then(setMessages).catch(() => {});
     fetchModels().then(setModels).catch(() => {});
+    fetchRoutes().then(routes => {
+      const conv = routes.find(r => r.task_type === 'conversation');
+      if (conv) setSelectedModel(conv.model_id);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -102,6 +108,16 @@ export default function ChatPage() {
               ? { ...tc, loading: false, success: (event as Record<string, unknown>).success as boolean, result: (event as Record<string, unknown>).result as string | undefined }
               : tc
           ));
+        } else if (event.type === 'cost') {
+          const ev = event as Record<string, unknown>;
+          const costUsd = ev.costUsd as number;
+          const model = ev.model as string | undefined;
+          setMessages(prev => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last) updated[updated.length - 1] = { role: last.role, content: last.content, channel: last.channel, costUsd: costUsd > 0 ? costUsd : undefined, model };
+            return updated;
+          });
         } else if (event.type === 'error') {
           setMessages(prev => {
             const updated = [...prev];
@@ -134,11 +150,17 @@ export default function ChatPage() {
         <h1>Chat</h1>
         {models.length > 0 && (
           <div className="model-selector" style={{ marginLeft: 'auto' }}>
-            <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
-              <option value="">Auto (defaut)</option>
+            <select value={selectedModel} onChange={e => {
+              const modelId = e.target.value;
+              setSelectedModel(modelId);
+              if (modelId) updateRouteApi('conversation', modelId).catch(() => {});
+            }}>
               {models.map(m => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
+              {selectedModel && !models.find(m => m.id === selectedModel) && (
+                <option value={selectedModel}>{selectedModel}</option>
+              )}
             </select>
           </div>
         )}
@@ -152,7 +174,15 @@ export default function ChatPage() {
               </span>
             )}
             {m.role === 'assistant' ? (
-              <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
+              <>
+                <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
+                {(m.model || (m.costUsd != null && m.costUsd > 0)) && (
+                  <span className="chat-cost-badge" title={m.costUsd ? `Cout total : $${m.costUsd.toFixed(6)}` : undefined}>
+                    {m.model && <span className="chat-model-name">{m.model}</span>}
+                    {m.costUsd != null && m.costUsd > 0 && ` ~$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`}
+                  </span>
+                )}
+              </>
             ) : (
               m.content
             )}

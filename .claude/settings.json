@@ -24,10 +24,45 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(pnpm --filter @makilab/agent typecheck:*)",
-      "Bash(pnpm dev:agent:*)"
+      "Bash(pnpm dev:agent:*)",
+      "Bash(python3:*)",
+      "Bash(pnpm --filter @makilab/agent exec tsc:*)",
+      "Bash(printf:*)",
+      "Bash(/c/Users/adrie/AppData/Local/Programs/Python/Python313/python:*)",
+      "Bash(tee:*)",
+      "Bash(curl:*)",
+      "Bash(pnpm --filter @makilab/agent add:*)",
+      "Bash(pnpm --filter @makilab/agent exec node:*)",
+      "Bash(pnpm --filter @makilab/agent test:*)",
+      "Bash(pnpm --filter @makilab/dashboard build:*)",
+      "Bash(git rm:*)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 node -e \"fetch\\(''https://127.0.0.1:27124/'', { headers: { ''Authorization'': ''Bearer '' + process.env.OBSIDIAN_REST_API_KEY } }\\).then\\(r => console.log\\(''status:'', r.status, r.statusText\\)\\).catch\\(e => console.log\\(''error:'', e.message\\)\\)\")",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 OBSIDIAN_REST_API_KEY=ca5420e4523a78470cb6c37903aeb57fb3c5b65bcab6798ed58d32c62bb1d101 node:*)",
+      "WebFetch(domain:coddingtonbear.github.io)",
+      "WebFetch(domain:www.home-assistant.io)",
+      "Bash(ls:*)",
+      "Bash(tasklist:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm dev:api:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(pnpm test:*)",
+      "Bash(npx vitest run)",
+      "Bash(npx tsc:*)",
+      "Bash(git stash:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:ts.sdk.modelcontextprotocol.io)",
+      "Bash(pnpm --filter @makilab/agent exec vitest run:*)",
+      "Bash(git status:*)",
+      "Bash(npx next lint)",
+      "Bash(pnpm --filter @makilab/dashboard add geist lucide-react)",
+      "WebFetch(domain:openrouter.ai)"
     ],
     "additionalDirectories": [
-      "d:\\SynologyDrive\\IA et agents\\makilab\\docs"
+      "d:\\SynologyDrive\\IA et agents\\makilab\\docs",
+      "\\tmp",
+      "d:\\SynologyDrive\\IA et agents\\makilab\\packages\\agent\\src"
     ]
   }
 }

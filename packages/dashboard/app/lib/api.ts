@@ -272,8 +272,14 @@ export async function fetchCostHistory(days = 30): Promise<CostHistoryPoint[]> {
   return res.json();
 }
 
-export async function fetchRecentUsage(limit = 50): Promise<LlmUsageEntry[]> {
-  const res = await fetch(`${API_BASE}/costs/recent?limit=${limit}`);
+export async function fetchRecentUsage(limit = 50, offset = 0): Promise<LlmUsageEntry[]> {
+  const res = await fetch(`${API_BASE}/costs/recent?limit=${limit}&offset=${offset}`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchUsageContext(id: number): Promise<AgentEvent[]> {
+  const res = await fetch(`${API_BASE}/costs/recent/${id}/context`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -442,6 +448,7 @@ export interface MemorySettingsInfo {
   obsidian_context_enabled: boolean;
   obsidian_context_notes: string[];
   obsidian_context_tag: string;
+  prefer_openrouter: boolean;
 }
 
 export interface MemorySearchResult {
@@ -546,4 +553,24 @@ export async function updateNotificationSettingsApi(channel: string, fields: Par
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
   });
+}
+
+// ── Agent Prompt ─────────────────────────────────────────────
+
+export async function fetchAgentPrompt(): Promise<string> {
+  const res = await fetch(`${API_BASE}/agent-prompt`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const data = await res.json() as { prompt: string };
+  return data.prompt;
+}
+
+export async function updateAgentPrompt(prompt: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/agent-prompt`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const data = await res.json() as { prompt: string };
+  return data.prompt;
 }

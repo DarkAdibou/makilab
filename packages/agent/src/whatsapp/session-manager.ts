@@ -63,9 +63,16 @@ process.stderr.write = function (chunk: string | Uint8Array, ...args: unknown[])
 
 const originalConsoleError = console.error;
 console.error = (...args: unknown[]) => {
-  const first = String(args[0] ?? '');
-  if (SUPPRESSED_PATTERNS.some(p => first.includes(p))) return;
+  const joined = args.map(a => String(a ?? '')).join(' ');
+  if (SUPPRESSED_PATTERNS.some(p => joined.includes(p))) return;
   originalConsoleError(...args);
+};
+
+const originalConsoleLog = console.log.bind(console);
+console.log = (...args: unknown[]) => {
+  const joined = args.map(a => String(a ?? '')).join(' ');
+  if (SUPPRESSED_PATTERNS.some(p => joined.includes(p))) return;
+  originalConsoleLog(...args);
 };
 
 export class WhatsAppSessionManager {

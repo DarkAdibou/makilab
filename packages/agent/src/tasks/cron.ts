@@ -139,7 +139,7 @@ export function startCron(): void {
         const notifyChannels: string[] = (() => { try { return JSON.parse(task.notify_channels || '[]'); } catch { return []; } })();
         const start = Date.now();
         try {
-          const reply = await runAgentLoop(task.cron_prompt!, {
+          const { reply } = await runAgentLoop(task.cron_prompt!, {
             channel: (task.channel as Channel) ?? 'cli',
             from: 'cron',
             history: [],
@@ -186,7 +186,7 @@ export function syncRecurringTasks(): void {
         logger.info({ taskId: task.id, title: task.title }, 'Running recurring task');
         const start = Date.now();
         try {
-          const reply = await runAgentLoop(task.cron_prompt!, {
+          const { reply } = await runAgentLoop(task.cron_prompt!, {
             channel: (task.channel as Channel) ?? 'cli',
             from: 'cron',
             history: [],
@@ -234,7 +234,7 @@ export async function executeRecurringTask(task: { id: string; title?: string; c
 
   const start = Date.now();
   try {
-    const reply = await runAgentLoop(task.cron_prompt, {
+    const { reply } = await runAgentLoop(task.cron_prompt, {
       channel: (task.channel as Channel) ?? 'cli',
       from: 'cron',
       history: [],

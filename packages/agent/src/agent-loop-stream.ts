@@ -17,6 +17,7 @@ import {
   buildMemoryPrompt,
   saveMessage,
   logAgentEvent,
+  getAgentPrompt,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
@@ -30,28 +31,10 @@ const llm = createLlmClient();
 
 const SUBAGENT_SEP = '__';
 
-const BASE_SYSTEM_PROMPT = `Tu es Makilab, un agent personnel semi-autonome.
-Tu aides ton utilisateur avec ses tâches quotidiennes : emails, recherche, notes, bookmarks, etc.
-Tu réponds toujours en français sauf si on te parle dans une autre langue.
-Tu es concis, précis et proactif.
-
-Principes fondamentaux :
-- Tu ne fais que ce qui t'est explicitement autorisé (whitelist)
-- Tu demandes confirmation avant les actions importantes
-- Tu logs tout ce que tu fais (transparence totale)
-- En cas de doute, tu t'arrêtes et tu demandes
-- Tu ne contournes jamais une permission refusée
-
-Tâches récurrentes :
-- Ne crée JAMAIS de tâche récurrente (tasks__create avec cron_expression) sauf si l'utilisateur le demande EXPLICITEMENT
-- Mots-clés qui justifient une tâche récurrente : "rappelle-moi", "tous les jours", "chaque semaine", "programme", "planifie", "récurrent"
-- Une question ponctuelle ("quel est le dernier article de...") n'est PAS une tâche récurrente — réponds directement
-- Avant de créer une tâche récurrente, confirme avec l'utilisateur : fréquence, prompt, horaire
-
-Mémoire long terme :
-- Si l'utilisateur fait référence à une conversation passée ou un sujet déjà discuté, utilise memory__search
-- Si tu manques de contexte sur un sujet qui a potentiellement été abordé avant, utilise memory__search
-- En cas de doute, demande à l'utilisateur s'il veut que tu cherches dans ta mémoire`;
+/** Load agent prompt from DB (editable via Mission Control) */
+function getBaseSystemPrompt(): string {
+  return getAgentPrompt();
+}
 
 /** Build the full tool list: subagent actions + legacy tools */
 function buildToolList(): Anthropic.Tool[] {
@@ -86,6 +69,7 @@ export type StreamEvent =
   | { type: 'text_delta'; content: string }
   | { type: 'tool_start'; name: string; args?: Record<string, unknown> }
   | { type: 'tool_end'; name: string; success: boolean; result?: string }
+  | { type: 'cost'; costUsd: number; model?: string }
   | { type: 'done'; fullText: string }
   | { type: 'error'; message: string };
 
@@ -108,7 +92,7 @@ export async function* runAgentLoopStreaming(
   const retrieval = await autoRetrieve(userMessage, channel);
   const retrievalSection = buildRetrievalPrompt(retrieval);
 
-  const systemPrompt = [BASE_SYSTEM_PROMPT, memorySection, retrievalSection, capabilitiesSection]
+  const systemPrompt = [getBaseSystemPrompt(), memorySection, retrievalSection, capabilitiesSection]
     .filter(Boolean)
     .join('\n\n');
 
@@ -126,6 +110,8 @@ export async function* runAgentLoopStreaming(
   const anthropicTools = buildToolList();
   let iterations = 0;
   let fullText = '';
+  let totalCostUsd = 0;
+  let resolvedModel = '';
 
   // ── Agentic loop ────────────────────────────────────────────────────────
   try {
@@ -150,7 +136,9 @@ export async function* runAgentLoopStreaming(
         }
       }
 
-      const { message: finalMessage } = await streamResult.finalMessage();
+      const { message: finalMessage, usage } = await streamResult.finalMessage();
+      totalCostUsd += usage.costUsd;
+      if (!resolvedModel) resolvedModel = usage.model;
 
       if (finalMessage.stop_reason === 'end_turn') {
         break;
@@ -285,5 +273,6 @@ export async function* runAgentLoopStreaming(
   extractAndSaveFacts(userMessage, fullText, channel, toolResultTexts).catch(() => {});
   indexConversation(channel, userMessage, fullText).catch(() => {});
 
+  yield { type: 'cost', costUsd: totalCostUsd, model: resolvedModel };
   yield { type: 'done', fullText };
 }

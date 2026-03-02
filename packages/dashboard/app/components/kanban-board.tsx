@@ -3,13 +3,15 @@ import { useState } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
   PointerSensor,
   useSensor,
   useSensors,
   useDroppable,
   type DragStartEvent,
   type DragEndEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { TaskCard } from './task-card';
@@ -72,6 +74,20 @@ interface Props {
   onRequestAdd: () => void;
   onTaskClick?: (task: TaskInfo) => void;
 }
+
+const COLUMN_IDS = new Set(COLUMNS.map(c => c.id as string));
+
+/** Prioritize column droppables: pointer position determines the column */
+const kanbanCollision: CollisionDetection = (args) => {
+  // First try pointerWithin — most natural for column-based kanban
+  const pointerHits = pointerWithin(args);
+  // Prefer column hits over card hits
+  const columnHit = pointerHits.find(h => COLUMN_IDS.has(String(h.id)));
+  if (columnHit) return [columnHit];
+  if (pointerHits.length > 0) return pointerHits;
+  // Fallback to rect intersection
+  return rectIntersection(args);
+};
 
 export function KanbanBoard({ tasks, onTasksChange, onRequestAdd, onTaskClick }: Props) {
   const [activeTask, setActiveTask] = useState<TaskInfo | null>(null);
@@ -145,7 +161,7 @@ export function KanbanBoard({ tasks, onTasksChange, onRequestAdd, onTaskClick }:
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={kanbanCollision}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >

@@ -11,6 +11,7 @@
 
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { config } from '../config.ts';
+import { createLlmClient } from '../llm/client.ts';
 
 export const webSubAgent: SubAgent = {
   name: 'web',
@@ -42,6 +43,18 @@ export const webSubAgent: SubAgent = {
         required: ['url'],
       },
     },
+    // Deep research via Perplexity Sonar (requires OpenRouter)
+    ...(config.openrouterApiKey ? [{
+      name: 'deep_research',
+      description: 'Recherche approfondie via Perplexity Sonar. Retourne un résumé structuré avec sources. Utilise pour les questions complexes nécessitant une synthèse de plusieurs sources.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          query: { type: 'string' as const, description: 'Question ou sujet de recherche approfondie' },
+        },
+        required: ['query'],
+      },
+    }] : []),
   ],
 
   async execute(action: string, input: Record<string, unknown>): Promise<SubAgentResult> {
@@ -55,6 +68,10 @@ export const webSubAgent: SubAgent = {
 
       if (action === 'fetch') {
         return await fetchUrl(input['url'] as string);
+      }
+
+      if (action === 'deep_research') {
+        return await deepResearch(input['query'] as string);
       }
 
       return { success: false, text: `Action inconnue: ${action}`, error: `Unknown action: ${action}` };
@@ -234,5 +251,35 @@ async function fetchUrl(url: string): Promise<SubAgentResult> {
     success: true,
     text: `Contenu de ${url}:\n\n${text}`,
     data: { url, textLength: text.length },
+  };
+}
+
+// --- Deep Research via Perplexity Sonar ---
+
+const SONAR_MODEL = 'perplexity/sonar-pro';
+
+async function deepResearch(query: string): Promise<SubAgentResult> {
+  if (!config.openrouterApiKey) {
+    return { success: false, text: 'Deep research indisponible (OPENROUTER_API_KEY requis)', error: 'No OpenRouter key' };
+  }
+
+  const llm = createLlmClient();
+  const response = await llm.chat({
+    taskType: 'classification',
+    model: SONAR_MODEL,
+    messages: [{ role: 'user', content: query }],
+    system: 'Tu es un assistant de recherche. Fournis une réponse structurée, détaillée et sourcée. Cite tes sources avec des URLs.',
+    maxTokens: 4096,
+  });
+
+  const text = response.content
+    .filter((b): b is { type: 'text'; text: string; citations: undefined } => b.type === 'text')
+    .map(b => b.text)
+    .join('\n');
+
+  return {
+    success: true,
+    text: `Recherche approfondie (Sonar) pour "${query}":\n\n${text}`,
+    data: { model: SONAR_MODEL, tokensIn: response.usage.tokensIn, tokensOut: response.usage.tokensOut },
   };
 }

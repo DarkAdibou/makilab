@@ -129,27 +129,40 @@ export default function ModelsPage() {
         <section>
           <h2 className="models-section-title">Suggestions d&apos;optimisation</h2>
           <div className="models-suggestions-grid">
-            {suggestions.map((s) => (
-              <div key={s.taskType} className="card models-suggestion-card">
-                <div className="models-suggestion-header">
-                  <span className="badge badge-cron">{s.taskType}</span>
-                  <span className="badge badge-success">-{(s.savingsPercent ?? 0).toFixed(0)}%</span>
-                </div>
-                <div className="models-suggestion-body">
-                  <div className="models-suggestion-arrow">
-                    <span className="text-muted" style={{ fontSize: '0.8125rem' }}>{s.currentModel.split('/').pop()}</span>
-                    <span style={{ color: 'var(--muted-foreground)' }}>&rarr;</span>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{s.suggestedName}</span>
+            {suggestions.map((s) => {
+              const catalogEntry = catalog.find((m) => m.id === s.suggestedModel);
+              return (
+                <div key={s.taskType} className="card models-suggestion-card">
+                  <div className="models-suggestion-header">
+                    <span className="badge badge-cron">{s.taskType}</span>
+                    <span className="badge badge-success">-{(s.savingsPercent ?? 0).toFixed(0)}%</span>
                   </div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    {formatPrice(s.currentPriceIn)}/{formatPrice(s.currentPriceOut)} &rarr; {formatPrice(s.suggestedPriceIn)}/{formatPrice(s.suggestedPriceOut)}
+                  <div className="models-suggestion-body">
+                    <div className="models-suggestion-arrow">
+                      <span className="text-muted" style={{ fontSize: '0.8125rem' }}>{s.currentModel.split('/').pop()}</span>
+                      <span style={{ color: 'var(--muted-foreground)' }}>&rarr;</span>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{s.suggestedName}</span>
+                    </div>
+                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      {formatPrice(s.currentPriceIn)}/{formatPrice(s.currentPriceOut)} &rarr; {formatPrice(s.suggestedPriceIn)}/{formatPrice(s.suggestedPriceOut)}
+                    </div>
+                    {catalogEntry && (
+                      <div className="models-suggestion-details">
+                        <span className="badge badge-muted">{catalogEntry.provider_slug}</span>
+                        {catalogEntry.context_length > 0 && (
+                          <span className="text-muted">{(catalogEntry.context_length / 1000).toFixed(0)}K ctx</span>
+                        )}
+                        {!!catalogEntry.supports_tools && <span className="badge badge-success" style={{ padding: '1px 6px', fontSize: '0.6875rem' }}>tools</span>}
+                        {!!catalogEntry.supports_reasoning && <span className="badge badge-success" style={{ padding: '1px 6px', fontSize: '0.6875rem' }}>reasoning</span>}
+                      </div>
+                    )}
                   </div>
+                  <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.8125rem', marginTop: 8 }} onClick={() => handleApplySuggestion(s)}>
+                    Appliquer
+                  </button>
                 </div>
-                <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.8125rem', marginTop: 8 }} onClick={() => handleApplySuggestion(s)}>
-                  Appliquer
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

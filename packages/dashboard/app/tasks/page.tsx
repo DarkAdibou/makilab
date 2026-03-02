@@ -12,17 +12,7 @@ import {
   type TaskExecution,
   type ModelInfo,
 } from '../lib/api';
-
-function humanCron(expr: string): string {
-  const parts = expr.split(' ');
-  if (parts.length !== 5) return expr;
-  const [min, hour, dom, , dow] = parts;
-  const dayNames: Record<string, string> = { '0': 'dim', '1': 'lun', '2': 'mar', '3': 'mer', '4': 'jeu', '5': 'ven', '6': 'sam', '7': 'dim' };
-  if (dow !== '*' && dom === '*' && hour !== '*') return `${dayNames[dow!] ?? `jour ${dow}`} ${hour}h${min === '0' ? '' : min}`;
-  if (dow === '*' && dom === '*' && hour !== '*') return `Tous les jours ${hour}h${min === '0' ? '' : min}`;
-  if (dom !== '*' && dow === '*' && hour !== '*') return `Le ${dom} du mois ${hour}h${min === '0' ? '' : min}`;
-  return expr;
-}
+import { humanCron } from '../lib/utils';
 
 type CronFreq = 'daily' | 'weekly' | 'monthly' | 'custom';
 

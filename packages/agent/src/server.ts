@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt } from './memory/sqlite.ts';
 import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
@@ -124,13 +124,13 @@ export async function buildServer() {
     async (req) => {
       const { message, channel = 'mission_control', model } = req.body;
       const history = getRecentMessages(channel, 20);
-      const reply = await runAgentLoop(message, {
+      const result = await runAgentLoop(message, {
         channel: channel as 'mission_control',
         from: 'mission_control',
         history,
         model,
       });
-      return { reply };
+      return { reply: result.reply, costUsd: result.costUsd };
     },
   );
 
@@ -306,12 +306,22 @@ export async function buildServer() {
     },
   );
 
-  // GET /api/costs/recent — recent LLM usage entries
-  app.get<{ Querystring: { limit?: string } }>(
+  // GET /api/costs/recent — recent LLM usage entries (with pagination)
+  app.get<{ Querystring: { limit?: string; offset?: string } }>(
     '/api/costs/recent',
     async (req) => {
       const limit = parseInt(req.query.limit ?? '50', 10);
-      return getRecentLlmUsage(limit);
+      const offset = parseInt(req.query.offset ?? '0', 10);
+      return getRecentLlmUsage(limit, offset);
+    },
+  );
+
+  // GET /api/costs/recent/:id/context — agent events near a specific usage entry
+  app.get<{ Params: { id: string } }>(
+    '/api/costs/recent/:id/context',
+    async (req) => {
+      const id = parseInt(req.params.id, 10);
+      return getAgentEventsNearUsage(id);
     },
   );
 
@@ -446,6 +456,21 @@ export async function buildServer() {
   app.patch<{ Body: Record<string, unknown> }>('/api/memory/settings', async (req) => {
     updateMemorySettings(req.body as Partial<MemorySettings>);
     return getMemorySettings();
+  });
+
+  // GET /api/agent-prompt — get the editable agent metaprompt
+  app.get('/api/agent-prompt', async () => {
+    return { prompt: getAgentPrompt() };
+  });
+
+  // PUT /api/agent-prompt — update the agent metaprompt
+  app.put<{ Body: { prompt: string } }>('/api/agent-prompt', async (req) => {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string') {
+      throw new Error('prompt is required');
+    }
+    setAgentPrompt(prompt);
+    return { prompt: getAgentPrompt() };
   });
 
   // GET /api/memory/stats — memory system statistics

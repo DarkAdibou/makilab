@@ -1292,10 +1292,22 @@ export function logLlmUsage(params: {
   return Number(result.lastInsertRowid);
 }
 
-export function getRecentLlmUsage(limit = 50): LlmUsageRow[] {
+export function getRecentLlmUsage(limit = 50, offset = 0): LlmUsageRow[] {
   return getDb().prepare(
-    'SELECT * FROM llm_usage ORDER BY created_at DESC LIMIT ?'
-  ).all(limit) as unknown as LlmUsageRow[];
+    'SELECT * FROM llm_usage ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(limit, offset) as unknown as LlmUsageRow[];
+}
+
+/** Get agent events near a specific llm_usage entry (±5s window, same channel) */
+export function getAgentEventsNearUsage(usageId: number): AgentEventRow[] {
+  const usage = getDb().prepare('SELECT channel, created_at FROM llm_usage WHERE id = ?').get(usageId) as { channel: string | null; created_at: string } | undefined;
+  if (!usage) return [];
+  return getDb().prepare(`
+    SELECT * FROM agent_events
+    WHERE channel = ?
+    AND created_at BETWEEN datetime(?, '-5 seconds') AND datetime(?, '+5 seconds')
+    ORDER BY created_at ASC
+  `).all(usage.channel, usage.created_at, usage.created_at) as unknown as AgentEventRow[];
 }
 
 export function getLlmUsageSummary(period: 'day' | 'week' | 'month' | 'year'): {
@@ -1466,6 +1478,7 @@ export interface MemorySettings {
   obsidian_context_enabled: boolean;
   obsidian_context_notes: string[];
   obsidian_context_tag: string;
+  prefer_openrouter: boolean;
 }
 
 export function getMemorySettings(): MemorySettings {
@@ -1478,6 +1491,7 @@ export function getMemorySettings(): MemorySettings {
     obsidian_context_enabled: map.get('obsidian_context_enabled') !== 'false',
     obsidian_context_notes: JSON.parse(map.get('obsidian_context_notes') ?? '[]'),
     obsidian_context_tag: map.get('obsidian_context_tag') ?? 'makilab',
+    prefer_openrouter: map.get('prefer_openrouter') === 'true',
   };
 }
 
@@ -1488,6 +1502,75 @@ export function updateMemorySettings(updates: Partial<MemorySettings>): void {
     const dbValue = Array.isArray(value) ? JSON.stringify(value) : String(value);
     stmt.run(key, dbValue);
   }
+}
+
+// ============================================================
+// Agent Prompt (editable metaprompt)
+// ============================================================
+
+const DEFAULT_AGENT_PROMPT = `Tu es Makilab, un agent personnel semi-autonome.
+Tu aides ton utilisateur (Adrien) avec ses tâches quotidiennes : emails, recherche, notes, bookmarks, domotique, etc.
+
+## Langue et ton
+- Tu réponds toujours en français sauf si on te parle dans une autre langue
+- Tu es concis, précis et proactif
+- Pas de formalités excessives ("Bien sûr !", "Avec plaisir !") — va droit au but
+- Tu peux être informel, tutoiement OK
+- Pas d'emojis sauf si le contexte s'y prête (WhatsApp OK, résumés non)
+
+## Principes fondamentaux
+- Tu ne fais que ce qui t'est explicitement autorisé (whitelist)
+- Tu demandes confirmation avant les actions importantes (envoi email, suppression, push git)
+- Tu logs tout ce que tu fais (transparence totale)
+- En cas de doute, tu t'arrêtes et tu demandes
+- Tu ne contournes jamais une permission refusée
+
+## Tâches planifiées
+- Si l'utilisateur demande quelque chose "dans X minutes", "à 18h", "demain matin", etc. → crée une tâche ponctuelle avec tasks__create :
+  - title : description courte de l'action
+  - due_at : date/heure ISO 8601 UTC (calcule à partir de l'heure actuelle)
+  - cron_prompt : le prompt à exécuter au moment voulu (ex: "Souhaite bonne nuit à l'utilisateur")
+  - channel : le canal actuel
+  - notify_channels : inclure le canal actuel si c'est whatsapp (ex: ["whatsapp"])
+  - PAS de cron_expression (c'est une tâche one-shot, pas récurrente)
+- Le système exécutera automatiquement la tâche quand due_at sera atteint
+- La tâche sera visible dans le kanban jusqu'à son exécution
+
+## Tâches récurrentes
+- Ne crée JAMAIS de tâche récurrente (tasks__create avec cron_expression) sauf si l'utilisateur le demande EXPLICITEMENT
+- Mots-clés qui justifient une tâche récurrente : "tous les jours", "chaque semaine", "récurrent"
+- Une question ponctuelle ("quel est le dernier article de...") n'est PAS une tâche récurrente — réponds directement
+- Avant de créer une tâche récurrente, confirme avec l'utilisateur : fréquence, prompt, horaire
+
+## Mémoire long terme
+- Si l'utilisateur fait référence à une conversation passée ou un sujet déjà discuté, utilise memory__search
+- Si tu manques de contexte sur un sujet qui a potentiellement été abordé avant, utilise memory__search
+- En cas de doute, demande à l'utilisateur s'il veut que tu cherches dans ta mémoire
+
+## Vocabulaire utilisateur (équivalences)
+- "bookmark ça" / "garde ça" → karakeep__create_bookmark
+- "note ça" / "écris ça" → obsidian__create ou obsidian__append
+- "cherche" / "trouve" → web__search puis karakeep si pertinent
+- "rappelle-moi" / "dans X minutes" → tasks__create avec due_at
+- "c'est quoi déjà" / "on avait parlé de" → memory__search
+- "envoie un mail" / "écris à" → gmail (avec confirmation)
+- "allume" / "éteins" / "température" → homeassistant__control
+
+## Préférences Adrien
+- Développeur TypeScript / Node.js
+- Intéressé par : IA, agents, self-hosting, domotique, productivité
+- Préfère les réponses actionables plutôt que les explications longues
+- Cost-conscious : toujours privilégier les solutions économiques`;
+
+/** Get the agent prompt (editable metaprompt) */
+export function getAgentPrompt(): string {
+  const row = getDb().prepare("SELECT value FROM memory_settings WHERE key = 'agent_prompt'").get() as { value: string } | undefined;
+  return row?.value ?? DEFAULT_AGENT_PROMPT;
+}
+
+/** Update the agent prompt */
+export function setAgentPrompt(prompt: string): void {
+  getDb().prepare("INSERT OR REPLACE INTO memory_settings (key, value) VALUES ('agent_prompt', ?)").run(prompt);
 }
 
 // ============================================================

@@ -2,13 +2,29 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Bell, Info, AlertTriangle, XCircle, CheckCircle } from 'lucide-react';
 import {
   fetchUnreadCount,
   fetchNotifications,
   markNotificationReadApi,
   markAllNotificationsReadApi,
 } from '../lib/api';
+import { timeAgo } from '../lib/utils';
 import type { NotificationInfo } from '../lib/api';
+
+const SEVERITY_ICON: Record<string, typeof Info> = {
+  info: Info,
+  warning: AlertTriangle,
+  error: XCircle,
+  success: CheckCircle,
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  info: '#3b82f6',
+  warning: '#f59e0b',
+  error: 'var(--destructive)',
+  success: '#22c55e',
+};
 
 export function NotificationBell() {
   const [unread, setUnread] = useState(0);
@@ -75,62 +91,50 @@ export function NotificationBell() {
     setNotifications((prev) => prev.map((x) => ({ ...x, read: 1 })));
   }
 
-  function timeAgo(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60_000);
-    if (mins < 1) return 'maintenant';
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}j`;
-  }
-
-  const severityIcon: Record<string, string> = {
-    info: 'i',
-    warning: '!',
-    error: 'x',
-    success: 'v',
-  };
-
   return (
     <div className="notif-bell-wrapper" ref={ref}>
       <button className="notif-bell-btn" onClick={handleOpen} title="Notifications">
-        <span className="notif-bell-icon">&#128276;</span>
-        {unread > 0 && <span className="notif-bell-badge">{unread > 99 ? '99+' : unread}</span>}
+        <Bell size={20} />
+        {unread > 0 && (
+          <span className="notif-bell-badge">{unread > 99 ? '99+' : unread}</span>
+        )}
       </button>
 
       {open && (
         <div className="notif-dropdown">
           <div className="notif-dropdown-header">
-            <span className="notif-dropdown-title">Notifications</span>
+            <span>Notifications</span>
             {unread > 0 && (
-              <button className="btn btn-ghost notif-mark-all" onClick={handleMarkAllRead}>
+              <button className="notif-mark-all" onClick={handleMarkAllRead}>
                 Tout marquer lu
               </button>
             )}
           </div>
-          <div className="notif-dropdown-body">
+          <div className="notif-list">
             {loading ? (
-              <p className="text-muted" style={{ padding: 16, textAlign: 'center' }}>Chargement...</p>
+              <div className="notif-empty">Chargement...</div>
             ) : notifications.length === 0 ? (
-              <p className="text-muted" style={{ padding: 16, textAlign: 'center' }}>Aucune notification</p>
+              <div className="notif-empty">Aucune notification</div>
             ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  className={`notif-item ${n.read ? '' : 'notif-item-unread'}`}
-                  onClick={() => handleClickNotification(n)}
-                >
-                  <span className={`notif-severity notif-severity-${n.severity}`}>
-                    {severityIcon[n.severity] ?? 'i'}
-                  </span>
-                  <div className="notif-item-content">
-                    <span className="notif-item-title">{n.title}</span>
-                    <span className="notif-item-body">{n.body}</span>
-                  </div>
-                  <span className="notif-item-time">{timeAgo(n.created_at)}</span>
-                </button>
-              ))
+              notifications.map((n) => {
+                const SeverityIcon = SEVERITY_ICON[n.severity] ?? Info;
+                const severityColor = SEVERITY_COLOR[n.severity] ?? '#3b82f6';
+                return (
+                  <button
+                    key={n.id}
+                    className={`notif-item ${!n.read ? 'unread' : ''} notif-item-severity-${n.severity}`}
+                    onClick={() => handleClickNotification(n)}
+                  >
+                    <span className="notif-item-icon" style={{ color: severityColor }}>
+                      <SeverityIcon size={16} />
+                    </span>
+                    <div className="notif-item-body">
+                      <div className="notif-item-title">{n.title}</div>
+                      <div className="notif-item-time">{timeAgo(n.created_at)}</div>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

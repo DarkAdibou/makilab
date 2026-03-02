@@ -35,6 +35,7 @@ import {
   getOldestMessages,
   deleteMessagesUpTo,
   saveSummary,
+  getAgentPrompt,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
@@ -55,39 +56,10 @@ const COMPACT_KEEP_RECENT = 20;
  */
 const SUBAGENT_SEP = '__';
 
-const BASE_SYSTEM_PROMPT = `Tu es Makilab, un agent personnel semi-autonome.
-Tu aides ton utilisateur avec ses tâches quotidiennes : emails, recherche, notes, bookmarks, etc.
-Tu réponds toujours en français sauf si on te parle dans une autre langue.
-Tu es concis, précis et proactif.
-
-Principes fondamentaux :
-- Tu ne fais que ce qui t'est explicitement autorisé (whitelist)
-- Tu demandes confirmation avant les actions importantes
-- Tu logs tout ce que tu fais (transparence totale)
-- En cas de doute, tu t'arrêtes et tu demandes
-- Tu ne contournes jamais une permission refusée
-
-Tâches planifiées :
-- Si l'utilisateur demande quelque chose "dans X minutes", "à 18h", "demain matin", etc. → crée une tâche ponctuelle avec tasks__create :
-  - title : description courte de l'action
-  - due_at : date/heure ISO 8601 UTC (calcule à partir de l'heure actuelle)
-  - cron_prompt : le prompt à exécuter au moment voulu (ex: "Souhaite bonne nuit à l'utilisateur")
-  - channel : le canal actuel
-  - notify_channels : inclure le canal actuel si c'est whatsapp (ex: ["whatsapp"])
-  - PAS de cron_expression (c'est une tâche one-shot, pas récurrente)
-- Le système exécutera automatiquement la tâche quand due_at sera atteint
-- La tâche sera visible dans le kanban jusqu'à son exécution
-
-Tâches récurrentes :
-- Ne crée JAMAIS de tâche récurrente (tasks__create avec cron_expression) sauf si l'utilisateur le demande EXPLICITEMENT
-- Mots-clés qui justifient une tâche récurrente : "tous les jours", "chaque semaine", "récurrent"
-- Une question ponctuelle ("quel est le dernier article de...") n'est PAS une tâche récurrente — réponds directement
-- Avant de créer une tâche récurrente, confirme avec l'utilisateur : fréquence, prompt, horaire
-
-Mémoire long terme :
-- Si l'utilisateur fait référence à une conversation passée ou un sujet déjà discuté, utilise memory__search
-- Si tu manques de contexte sur un sujet qui a potentiellement été abordé avant, utilise memory__search
-- En cas de doute, demande à l'utilisateur s'il veut que tu cherches dans ta mémoire`;
+/** Load agent prompt from DB (editable via Mission Control) */
+function getBaseSystemPrompt(): string {
+  return getAgentPrompt();
+}
 
 /** Build the full tool list: subagent actions + legacy tools */
 function buildToolList(): Anthropic.Tool[] {
@@ -167,12 +139,12 @@ Retourne uniquement le résumé, sans introduction.\n\n${transcript}`,
  *
  * @param userMessage - The user's message text
  * @param context - Channel, sender (history is loaded from SQLite in E2+)
- * @returns The agent's final text response
+ * @returns The agent's final text response and accumulated cost
  */
 export async function runAgentLoop(
   userMessage: string,
   context: AgentContext,
-): Promise<string> {
+): Promise<{ reply: string; costUsd: number }> {
   const channel = context.channel ?? 'cli';
 
   // ── Memory context ────────────────────────────────────────────────────────
@@ -184,7 +156,7 @@ export async function runAgentLoop(
   const retrieval = await autoRetrieve(userMessage, channel);
   const retrievalSection = buildRetrievalPrompt(retrieval);
 
-  const systemPrompt = [BASE_SYSTEM_PROMPT, memorySection, retrievalSection, capabilitiesSection]
+  const systemPrompt = [getBaseSystemPrompt(), memorySection, retrievalSection, capabilitiesSection]
     .filter(Boolean)
     .join('\n\n');
 
@@ -203,6 +175,7 @@ export async function runAgentLoop(
   const anthropicTools = buildToolList();
   let iterations = 0;
   let finalReply = '';
+  let totalCostUsd = 0;
 
   // ── Agentic loop ──────────────────────────────────────────────────────────
   while (iterations < config.agentMaxIterations) {
@@ -216,6 +189,7 @@ export async function runAgentLoop(
       model: context.model,
       channel,
     });
+    totalCostUsd += response.usage.costUsd;
 
     if (response.stopReason === 'end_turn') {
       const textBlock = response.content.find((b) => b.type === 'text');
@@ -318,5 +292,5 @@ export async function runAgentLoop(
     compactHistory(channel).catch(() => {});
   }
 
-  return finalReply;
+  return { reply: finalReply, costUsd: totalCostUsd };
 }
