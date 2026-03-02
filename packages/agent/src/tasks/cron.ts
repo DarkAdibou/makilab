@@ -173,7 +173,7 @@ export function startCron(): void {
           await notifyCronResult(task.title, summary, durationMs).catch(() => {});
 
           if (notifyChannels.length > 0) {
-            await dispatchToChannels(reply, task.channel, notifyChannels, task.title);
+            await dispatchToChannels(reply, safeCronChannel(task.channel ?? 'cli'), notifyChannels, task.title);
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -228,7 +228,7 @@ export function syncRecurringTasks(): void {
 
           // Dispatch to additional notification channels
           if (notifyChannels.length > 0) {
-            await dispatchToChannels(reply, task.channel, notifyChannels, task.title);
+            await dispatchToChannels(reply, safeCronChannel(task.channel ?? 'cli'), notifyChannels, task.title);
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -275,7 +275,7 @@ export async function executeRecurringTask(task: { id: string; title?: string; c
     // Dispatch to additional notification channels
     const notifyChannels: string[] = (() => { try { return JSON.parse(task.notify_channels || '[]'); } catch { return []; } })();
     if (notifyChannels.length > 0) {
-      await dispatchToChannels(reply, task.channel, notifyChannels, task.title ?? 'Tâche récurrente');
+      await dispatchToChannels(reply, safeCronChannel(task.channel ?? 'cli'), notifyChannels, task.title ?? 'Tâche récurrente');
     }
 
     return { success: true, durationMs, result: summary };
