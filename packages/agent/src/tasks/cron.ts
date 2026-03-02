@@ -23,6 +23,7 @@ import { createTask, listRecurringTasks, listDueScheduledTasks, logTaskExecution
 import { runWorkflow } from './runner.ts';
 import type { WorkflowStep } from './runner.ts';
 import type { Channel } from '@makilab/shared';
+import { notifyCronResult, notifyTaskFailure, notifyCatalogUpdate } from '../notifications/task-emitter.ts';
 
 const dynamicJobs = new Map<string, ScheduledTask>();
 
@@ -121,11 +122,24 @@ export function startCron(): void {
       const { refreshCatalog } = await import('../llm/catalog.ts');
       const count = await refreshCatalog();
       logger.info({ count }, 'CRON: catalog refreshed');
+      await notifyCatalogUpdate(count).catch(() => {});
       // Check for cost optimization opportunities
       const { checkCostOptimizations } = await import('../notifications/cost-emitter.ts');
       await checkCostOptimizations();
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'CRON: catalog refresh failed');
+    }
+  });
+
+  // ── Garbage collection notifications — daily at 4:00 AM ──────────────
+  cron.schedule('0 4 * * *', async () => {
+    logger.info({}, 'CRON: notification GC triggered');
+    try {
+      const { deleteOldNotifications } = await import('../memory/sqlite.ts');
+      const deleted = deleteOldNotifications(30);
+      logger.info({ deleted }, 'CRON: old notifications purged');
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'CRON: notification GC failed');
     }
   });
 
@@ -150,6 +164,7 @@ export function startCron(): void {
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
           updateTaskStatus(task.id, 'done');
+          await notifyCronResult(task.title, summary, durationMs).catch(() => {});
 
           if (notifyChannels.length > 0) {
             await dispatchToChannels(reply, task.channel, notifyChannels, task.title);
@@ -159,6 +174,7 @@ export function startCron(): void {
           logger.error({ taskId: task.id, err: message }, 'Scheduled task failed');
           logTaskExecution({ taskId: task.id, status: 'error', durationMs: Date.now() - start, errorMessage: message });
           updateTaskStatus(task.id, 'failed');
+          await notifyTaskFailure(task.id, task.title, message).catch(() => {});
         }
       }
     } catch (err) {
@@ -194,13 +210,15 @@ export function syncRecurringTasks(): void {
             model: task.model ?? undefined,
             taskType: 'cron_task',
           });
+          const durationMs = Date.now() - start;
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({
             taskId: task.id,
             status: 'success',
-            durationMs: Date.now() - start,
+            durationMs,
             resultSummary: summary,
           });
+          await notifyCronResult(task.title, summary, durationMs).catch(() => {});
 
           // Dispatch to additional notification channels
           if (notifyChannels.length > 0) {
@@ -215,6 +233,7 @@ export function syncRecurringTasks(): void {
             durationMs: Date.now() - start,
             errorMessage: message,
           });
+          await notifyTaskFailure(task.id, task.title, message).catch(() => {});
         }
       });
 

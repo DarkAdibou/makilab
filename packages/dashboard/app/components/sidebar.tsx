@@ -37,6 +37,7 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/', label: 'Command Center', icon: LayoutDashboard },
       { href: '/activity', label: 'Activite', icon: BarChart3 },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
     ],
   },
   {

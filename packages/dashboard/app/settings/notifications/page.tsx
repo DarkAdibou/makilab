@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { fetchNotificationSettings, updateNotificationSettingsApi } from '../../lib/api';
 import type { NotificationSettingInfo } from '../../lib/api';
 
-const NOTIFICATION_TYPES = ['cost_alert', 'task_failure', 'system', 'agent_error', 'summary'];
+const NOTIFICATION_TYPES = ['cost_optimization', 'task_failure', 'catalog_update', 'cron_result', 'system_alert'];
 
 export default function NotificationSettingsPage() {
   const [settings, setSettings] = useState<NotificationSettingInfo[]>([]);

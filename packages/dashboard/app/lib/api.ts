@@ -132,9 +132,10 @@ export interface AgentEvent {
   created_at: string;
 }
 
-export async function fetchActivity(limit = 100, type?: string): Promise<AgentEvent[]> {
+export async function fetchActivity(limit = 100, type?: string, subagent?: string): Promise<AgentEvent[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (type) params.set('type', type);
+  if (subagent) params.set('subagent', subagent);
   const res = await fetch(`${API_BASE}/activity?${params}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();

@@ -1238,12 +1238,14 @@ export function logAgentEvent(event: {
 export function listAgentEvents(filter?: {
   type?: string;
   channel?: string;
+  subagent?: string;
   limit?: number;
 }): AgentEventRow[] {
   let sql = 'SELECT * FROM agent_events WHERE 1=1';
   const params: (string | number)[] = [];
   if (filter?.type) { sql += ' AND type = ?'; params.push(filter.type); }
   if (filter?.channel) { sql += ' AND channel = ?'; params.push(filter.channel); }
+  if (filter?.subagent) { sql += ' AND subagent = ?'; params.push(filter.subagent); }
   sql += ' ORDER BY created_at DESC LIMIT ?';
   params.push(filter?.limit ?? 100);
   return getDb().prepare(sql).all(...params) as unknown as AgentEventRow[];
@@ -1484,6 +1486,13 @@ export function markNotificationRead(id: string): void {
 
 export function markAllNotificationsRead(): void {
   getDb().prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
+}
+
+export function deleteOldNotifications(daysRead = 30): number {
+  const result = getDb().prepare(
+    "DELETE FROM notifications WHERE read = 1 AND created_at <= datetime('now', ?)"
+  ).run(`-${daysRead} days`);
+  return (result as unknown as { changes: number }).changes;
 }
 
 // ============================================================

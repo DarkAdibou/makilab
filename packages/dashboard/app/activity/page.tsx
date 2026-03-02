@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { fetchActivity, type AgentEvent } from '../lib/api';
+import { timeAgo } from '../lib/utils';
 
 const TYPE_ICONS: Record<string, string> = {
   tool_call: '\u{1F527}',
@@ -9,24 +10,20 @@ const TYPE_ICONS: Record<string, string> = {
   error: '\u274C',
 };
 
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "a l'instant";
-  if (mins < 60) return `il y a ${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours}h`;
-  return `il y a ${Math.floor(hours / 24)}j`;
-}
+const KNOWN_SUBAGENTS = [
+  'time', 'web', 'karakeep', 'obsidian', 'gmail', 'capture',
+  'tasks', 'homeassistant', 'memory', 'code', 'settings',
+];
 
 export default function ActivityPage() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [typeFilter, setTypeFilter] = useState('');
+  const [subagentFilter, setSubagentFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    fetchActivity(200, typeFilter || undefined).then(setEvents).catch(console.error);
-  }, [typeFilter]);
+    fetchActivity(200, typeFilter || undefined, subagentFilter || undefined).then(setEvents).catch(console.error);
+  }, [typeFilter, subagentFilter]);
 
   function toggleExpand(id: number) {
     setExpanded(prev => {
@@ -46,6 +43,12 @@ export default function ActivityPage() {
           <option value="tool_result">Resultats</option>
           <option value="error">Erreurs</option>
         </select>
+        <select className="textarea filter-select" value={subagentFilter} onChange={e => setSubagentFilter(e.target.value)}>
+          <option value="">Tous les subagents</option>
+          {KNOWN_SUBAGENTS.map(sa => (
+            <option key={sa} value={sa}>{sa}</option>
+          ))}
+        </select>
       </div>
       <div className="activity-timeline">
         {events.length === 0 && <p className="text-muted">Aucune activite enregistree.</p>}
@@ -64,7 +67,7 @@ export default function ActivityPage() {
               {ev.duration_ms !== null && (
                 <span className="text-muted">{ev.duration_ms}ms</span>
               )}
-              <span className="text-muted" style={{ marginLeft: 'auto' }}>{relativeTime(ev.created_at)}</span>
+              <span className="text-muted" style={{ marginLeft: 'auto' }}>{timeAgo(ev.created_at)}</span>
             </div>
             {expanded.has(ev.id) && (
               <div className="activity-event-detail">

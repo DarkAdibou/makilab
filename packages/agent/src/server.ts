@@ -192,12 +192,12 @@ export async function buildServer() {
   });
 
   // GET /api/activity — agent event log
-  app.get<{ Querystring: { limit?: string; type?: string; channel?: string } }>(
+  app.get<{ Querystring: { limit?: string; type?: string; channel?: string; subagent?: string } }>(
     '/api/activity',
     async (req) => {
-      const { limit: limitStr, type, channel } = req.query;
+      const { limit: limitStr, type, channel, subagent } = req.query;
       const limit = parseInt(limitStr ?? '100', 10);
-      return listAgentEvents({ type, channel, limit });
+      return listAgentEvents({ type, channel, subagent, limit });
     },
   );
 

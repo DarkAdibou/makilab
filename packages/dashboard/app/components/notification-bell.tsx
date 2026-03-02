@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Bell, Info, AlertTriangle, XCircle, CheckCircle } from 'lucide-react';
 import {
   fetchUnreadCount,
@@ -136,6 +137,11 @@ export function NotificationBell() {
                 );
               })
             )}
+          </div>
+          <div className="notif-dropdown-footer">
+            <Link href="/notifications" onClick={() => setOpen(false)}>
+              Voir toutes les notifications
+            </Link>
           </div>
         </div>
       )}
