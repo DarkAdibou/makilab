@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 Batch E20 terminé — Costs++, OpenRouter full routing, Sonar deep research ✅
+## Statut global : 🟢 Session fixes — WhatsApp bugs, badges persistants, camembert coûts, CRON verbeux ✅
 
 ---
 
@@ -317,45 +317,59 @@ Plan : `docs/plans/2026-03-02-e16-implementation.md`
 | L20.12 | Chat dropdown — synced avec route conversation DB bidirectionnel | ✅ |
 | L20.13 | /settings/llm page + sidebar link | ✅ |
 
+## Session fixes (post-E20)
+
+| Fix | Description | Statut |
+|---|---|---|
+| F1 | WhatsApp double réponse — `if (msg.key.fromMe) continue` dans session-manager.ts | ✅ |
+| F2 | CRON tâches polluant WhatsApp — `safeCronChannel()` redirige vers mission_control | ✅ |
+| F2b | dispatchToChannels — passage de safeCronChannel (fix skip WhatsApp notify) | ✅ |
+| F3 | Coût négatif OpenRouter — guard tokens > 0 dans client.ts + pricing.ts | ✅ |
+| F4 | Subagent `whatsapp__send` — nouveau subagent conditionnel WHATSAPP_ALLOWED_NUMBER | ✅ |
+| F5 | Models page — Fragment key prop (React warning) | ✅ |
+| F6 | CRON verbeux — cronSection dans system prompt (`from === 'cron'`) | ✅ |
+| F7 | Costs page — camembert SVG + ModelBreakdown drill-down par task type | ✅ |
+| F8 | Badges modèle persistants — migration messages_add_model + saveMessage(model?) | ✅ |
+
 ---
 
 ## Dernière session
 
-**Date :** 2026-03-02 (session 6)
+**Date :** 2026-03-02 (session 7)
 **Accompli :**
-- E20 terminé — Batch 5 features + fixes OpenRouter
-- OpenRouter full routing : toggle DB, callOpenRouter avec tools (format OpenAI), streamOpenRouter SSE
-- Conversion bidirectionnelle model IDs : `toOpenRouterModel` (claude-sonnet-4-6 → anthropic/claude-sonnet-4.6) + `toAnthropicModel` (inverse)
-- `modelSupportsTools()` : vérifie catalogue SQLite avant envoi tools — évite crash 404 sur modèles sans function calling
-- `inferProvider()` : reconnaît `anthropic/claude-*` comme Anthropic provider
-- Coût/requête badge : `runAgentLoop` retourne `{ reply, costUsd }`, stream émet `cost` event avec model résolu
-- Sonar deep research : action `web__deep_research` via `perplexity/sonar-pro` (conditionnel OPENROUTER_API_KEY)
-- Page /settings/llm avec toggle OpenRouter + lien sidebar
-- Kanban drag-and-drop : custom `kanbanCollision` prioritisant colonnes
-- Chat dropdown synced bidirectionnel avec routes /models
-- Command Center : visibilitychange listener pour re-fetch
+- F1-F4 : fixes WhatsApp (double réponse, CRON pollution, coût négatif, subagent send)
+- F5 : React key prop sur models/page.tsx (Fragment)
+- F6 : CRON verbeux — injection cronSection dans system prompt quand `from === 'cron'`
+- F7 : Camembert SVG sur /costs — ModelBreakdown avec drill-down task types, PieChart par type
+- F8 : Badges modèle persistants — colonne `model` dans table `messages`, saveMessage() étendu, fetchMessages type mis à jour
 
-**E20 détails :**
-- `packages/agent/src/llm/client.ts` : callOpenRouter + streamOpenRouter complets, conversion Anthropic↔OpenAI tools
-- `packages/agent/src/llm/router.ts` : getPreferOpenRouter() cache 60s, inferProvider() étendu
-- `packages/agent/src/memory/sqlite.ts` : prefer_openrouter dans MemorySettings
-- `packages/agent/src/agent-loop-stream.ts` : cost event avec model résolu
-- `packages/agent/src/agent-loop.ts` : retourne { reply, costUsd }
-- `packages/dashboard/app/settings/llm/page.tsx` : nouveau
-- `packages/dashboard/app/chat/page.tsx` : badge model + coût, dropdown synced routes
+**Fichiers modifiés (session 7) :**
+- `packages/agent/src/whatsapp/session-manager.ts` : fromMe filter simplifié
+- `packages/agent/src/tasks/cron.ts` : safeCronChannel() + 6 callsites corrigés
+- `packages/agent/src/llm/client.ts` : guard tokens > 0
+- `packages/agent/src/llm/pricing.ts` : guard NaN/négatif dans calculateCost
+- `packages/agent/src/subagents/whatsapp.ts` : nouveau — action send
+- `packages/agent/src/subagents/registry.ts` : whatsapp conditionnel
+- `packages/shared/src/index.ts` : 'whatsapp' dans SubAgentName
+- `packages/agent/src/agent-loop.ts` : cronSection system prompt
+- `packages/agent/src/agent-loop-stream.ts` : saveMessage avec model
+- `packages/agent/src/memory/sqlite.ts` : migration messages_add_model, saveMessage(model?), getRecentMessages retourne model
+- `packages/dashboard/app/costs/page.tsx` : PieChart + ModelBreakdown composants
+- `packages/dashboard/app/lib/api.ts` : fetchMessages inclut model
+- `packages/dashboard/app/models/page.tsx` : Fragment key
 
 **État du code :**
 - GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (40+ endpoints)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (14 pages)
 - `pnpm --filter @makilab/agent test` : 118 tests ✅
-- 10 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code
+- 11 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code, whatsapp (conditionnel)
 
 **Prochaines étapes :**
 - E8 — Canal Gmail entrant + Raycast webhook
 - E17 — Mission Control WebSocket (temps réel)
-- Kanban UX polish — datepicker, autocomplétion tags, thème dark/clair
-- Centralisation OpenRouter (user preference)
+- Kanban UX polish — datepicker, autocomplétion tags
+- Whisper transcription — intégration audio WhatsApp
 
 ---
 
@@ -380,6 +394,7 @@ Fichiers clés :
 - packages/agent/src/whatsapp/ — WhatsApp Baileys gateway (unifié dans Fastify)
 - packages/dashboard/ — Next.js 15 Mission Control
 
-Statut : E1-E7 ✅ E9-E11 ✅ E13-E14.5 ✅ E16 ✅ E18-E19 ✅
+Statut : E1-E7 ✅ E9-E11 ✅ E13-E14.5 ✅ E16 ✅ E18-E20 ✅ + session fixes (WhatsApp, badges, coûts, CRON)
+11 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code, whatsapp (conditionnel)
 Prochaine étape : E8 (Gmail entrant + Raycast) ou E17 (WebSocket)
 ```
