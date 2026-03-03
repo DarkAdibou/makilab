@@ -3,7 +3,7 @@
 
 ---
 
-## Statut global : 🟢 Session fixes — WhatsApp bugs, badges persistants, camembert coûts, CRON verbeux ✅
+## Statut global : 🟢 MCP HTTP transport + Google Maps + Google Workspace ✅
 
 ---
 
@@ -335,41 +335,41 @@ Plan : `docs/plans/2026-03-02-e16-implementation.md`
 
 ## Dernière session
 
-**Date :** 2026-03-02 (session 7)
+**Date :** 2026-03-03 (session 8)
 **Accompli :**
-- F1-F4 : fixes WhatsApp (double réponse, CRON pollution, coût négatif, subagent send)
-- F5 : React key prop sur models/page.tsx (Fragment)
-- F6 : CRON verbeux — injection cronSection dans system prompt quand `from === 'cron'`
-- F7 : Camembert SVG sur /costs — ModelBreakdown avec drill-down task types, PieChart par type
-- F8 : Badges modèle persistants — colonne `model` dans table `messages`, saveMessage() étendu, fetchMessages type mis à jour
+- MCP HTTP transport : McpServerConfig étendu (transport/url/headers), StreamableHTTPClientTransport dans bridge
+- resolveEnvVars() : résolution ${VAR} dans headers/env, skip gracieux si manquant
+- Google Maps Grounding Lite : entrée HTTP dans mcp-servers.json, GOOGLE_MAPS_API_KEY
+- Google Workspace MCP : entrée uvx stdio, GOOGLE_OAUTH_CLIENT_ID + SECRET
+- 3 nouveaux tests mcp-bridge (HTTP parse, skip sans url, défaut stdio) → 11/11 ✅
+- docs/mcp-servers-schema.json : schéma JSON pour VSCode IntelliSense
 
-**Fichiers modifiés (session 7) :**
-- `packages/agent/src/whatsapp/session-manager.ts` : fromMe filter simplifié
-- `packages/agent/src/tasks/cron.ts` : safeCronChannel() + 6 callsites corrigés
-- `packages/agent/src/llm/client.ts` : guard tokens > 0
-- `packages/agent/src/llm/pricing.ts` : guard NaN/négatif dans calculateCost
-- `packages/agent/src/subagents/whatsapp.ts` : nouveau — action send
-- `packages/agent/src/subagents/registry.ts` : whatsapp conditionnel
-- `packages/shared/src/index.ts` : 'whatsapp' dans SubAgentName
-- `packages/agent/src/agent-loop.ts` : cronSection system prompt
-- `packages/agent/src/agent-loop-stream.ts` : saveMessage avec model
-- `packages/agent/src/memory/sqlite.ts` : migration messages_add_model, saveMessage(model?), getRecentMessages retourne model
-- `packages/dashboard/app/costs/page.tsx` : PieChart + ModelBreakdown composants
-- `packages/dashboard/app/lib/api.ts` : fetchMessages inclut model
-- `packages/dashboard/app/models/page.tsx` : Fragment key
+**Fichiers modifiés (session 8) :**
+- `packages/agent/src/mcp/config.ts` : McpServerConfig étendu, parsing HTTP/stdio
+- `packages/agent/src/mcp/bridge.ts` : StreamableHTTPClientTransport, resolveEnvVars()
+- `packages/agent/src/tests/mcp-bridge.test.ts` : 3 nouveaux tests HTTP
+- `packages/agent/src/config.ts` : googleMapsApiKey, googleOAuthClientId, googleOAuthClientSecret
+- `.env.example` : sections Google Maps + Workspace
+- `mcp-servers.json` : google-maps (HTTP) + google-workspace (uvx)
+- `docs/mcp-servers-schema.json` : nouveau — schéma JSON config MCP
 
 **État du code :**
-- GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
+- GitHub : https://github.com/DarkAdibou/makilab.git (branch: feature/mcp-http-google)
 - `pnpm dev:api` : API Fastify port 3100 (40+ endpoints)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (14 pages)
-- `pnpm --filter @makilab/agent test` : 118 tests ✅
+- `pnpm --filter @makilab/agent test` : 121 tests (120 passent, 1 échec pré-existant memory-retrieval duplicate column)
 - 11 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code, whatsapp (conditionnel)
 
+**À faire manuellement (clés Google) :**
+1. Google Cloud Console → créer API Key → activer Maps Grounding Lite → ajouter GOOGLE_MAPS_API_KEY dans .env
+2. Google Cloud Console → OAuth2 Desktop → activer Gmail+Drive+Calendar APIs → ajouter GOOGLE_OAUTH_CLIENT_ID + SECRET dans .env
+3. `uvx workspace-mcp --tool-tier core` → auth OAuth2 interactif une seule fois
+
 **Prochaines étapes :**
+- Merge feature/mcp-http-google → master après test manuel avec clés
+- Task 11 (optionnel) : déprécier subagent gmail si MCP Workspace Gmail satisfaisant
 - E8 — Canal Gmail entrant + Raycast webhook
 - E17 — Mission Control WebSocket (temps réel)
-- Kanban UX polish — datepicker, autocomplétion tags
-- Whisper transcription — intégration audio WhatsApp
 
 ---
 
