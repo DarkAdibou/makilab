@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../config.ts', () => ({
   config: {
@@ -14,7 +14,76 @@ vi.mock('../logger.ts', () => ({
   },
 }));
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, readFileSync: vi.fn() };
+});
+
 describe('MCP bridge', () => {
+  describe('loadMcpServersConfig', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    it('parses HTTP transport config', async () => {
+      const { readFileSync } = await import('node:fs');
+      vi.mocked(readFileSync).mockReturnValue(
+        JSON.stringify({
+          'google-maps': {
+            transport: 'http',
+            url: 'https://mapstools.googleapis.com/mcp',
+            headers: { 'X-Goog-Api-Key': 'test-key' },
+            enabled: true,
+          },
+        }),
+      );
+      const { loadMcpServersConfig } = await import('../mcp/config.ts');
+      const result = loadMcpServersConfig();
+      expect(result['google-maps']).toMatchObject({
+        transport: 'http',
+        url: 'https://mapstools.googleapis.com/mcp',
+        headers: { 'X-Goog-Api-Key': 'test-key' },
+        enabled: true,
+      });
+    });
+
+    it('skips HTTP config without url', async () => {
+      const { readFileSync } = await import('node:fs');
+      vi.mocked(readFileSync).mockReturnValue(
+        JSON.stringify({
+          'bad-http': {
+            transport: 'http',
+            enabled: true,
+          },
+        }),
+      );
+      const { loadMcpServersConfig } = await import('../mcp/config.ts');
+      const result = loadMcpServersConfig();
+      expect(result['bad-http']).toBeUndefined();
+    });
+
+    it('defaults to stdio transport for existing configs', async () => {
+      const { readFileSync } = await import('node:fs');
+      vi.mocked(readFileSync).mockReturnValue(
+        JSON.stringify({
+          'my-server': {
+            command: 'npx',
+            args: ['-y', 'some-mcp'],
+            enabled: true,
+          },
+        }),
+      );
+      const { loadMcpServersConfig } = await import('../mcp/config.ts');
+      const result = loadMcpServersConfig();
+      expect(result['my-server']).toMatchObject({
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'some-mcp'],
+        enabled: true,
+      });
+    });
+  });
+
   describe('parseMcpToolName', () => {
     it('parses a valid MCP tool name', async () => {
       const { parseMcpToolName } = await import('../mcp/bridge.ts');

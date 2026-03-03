@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logger.ts';
 import { loadMcpServersConfig, type McpServerConfig } from './config.ts';
@@ -9,7 +10,7 @@ const MCP_SEP = '__';
 
 interface McpConnection {
   client: Client;
-  transport: StdioClientTransport;
+  transport: StdioClientTransport | StreamableHTTPClientTransport;
   serverName: string;
   tools: Anthropic.Tool[];
   connected: boolean;
@@ -42,12 +43,38 @@ export async function initMcpBridge(): Promise<void> {
   logger.info({ servers: connections.size, tools: totalTools }, 'MCP bridge initialized');
 }
 
+function resolveEnvVars(vars: Record<string, string>): Record<string, string> {
+  const resolved: Record<string, string> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    resolved[k] = v.replace(/\$\{(\w+)\}/g, (_, name: string) => process.env[name] ?? '');
+  }
+  return resolved;
+}
+
 async function connectServer(name: string, cfg: McpServerConfig): Promise<void> {
-  const transport = new StdioClientTransport({
-    command: cfg.command,
-    args: cfg.args,
-    env: { ...process.env, ...cfg.env } as Record<string, string>,
-  });
+  let transport: StdioClientTransport | StreamableHTTPClientTransport;
+
+  if (cfg.transport === 'http') {
+    const resolvedHeaders = resolveEnvVars(cfg.headers ?? {});
+    if (Object.values(resolvedHeaders).some((v) => v === '')) {
+      logger.warn({ server: name }, 'MCP HTTP server skipped — missing env var in headers');
+      return;
+    }
+    transport = new StreamableHTTPClientTransport(new URL(cfg.url!), {
+      requestInit: { headers: resolvedHeaders },
+    });
+  } else {
+    const resolvedEnv = resolveEnvVars(cfg.env ?? {});
+    if (Object.values(resolvedEnv).some((v) => v === '')) {
+      logger.warn({ server: name }, 'MCP stdio server skipped — missing env var');
+      return;
+    }
+    transport = new StdioClientTransport({
+      command: cfg.command!,
+      args: cfg.args ?? [],
+      env: { ...process.env, ...resolvedEnv } as Record<string, string>,
+    });
+  }
 
   const client = new Client(
     { name: 'makilab', version: '1.0.0' },

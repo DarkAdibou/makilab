@@ -4,9 +4,15 @@ import { config } from '../config.ts';
 import { logger } from '../logger.ts';
 
 export interface McpServerConfig {
-  command: string;
-  args: string[];
+  // Stdio transport (existing)
+  command?: string;
+  args?: string[];
   env?: Record<string, string>;
+  // HTTP transport (new)
+  transport?: 'stdio' | 'http';
+  url?: string;
+  headers?: Record<string, string>;
+  // Common
   enabled?: boolean;
 }
 
@@ -26,14 +32,27 @@ export function loadMcpServersConfig(): McpServersConfig {
       if (key.startsWith('$') || key.startsWith('_')) continue;
       if (!value || typeof value !== 'object') continue;
       const cfg = value as Record<string, unknown>;
-      if (!cfg['command'] || typeof cfg['command'] !== 'string') continue;
 
-      servers[key] = {
-        command: cfg['command'] as string,
-        args: (cfg['args'] as string[]) ?? [],
-        env: (cfg['env'] as Record<string, string>) ?? {},
-        enabled: cfg['enabled'] !== false,
-      };
+      const transport = (cfg['transport'] as string) ?? 'stdio';
+
+      if (transport === 'http') {
+        if (!cfg['url'] || typeof cfg['url'] !== 'string') continue;
+        servers[key] = {
+          transport: 'http',
+          url: cfg['url'] as string,
+          headers: (cfg['headers'] as Record<string, string>) ?? {},
+          enabled: cfg['enabled'] !== false,
+        };
+      } else {
+        if (!cfg['command'] || typeof cfg['command'] !== 'string') continue;
+        servers[key] = {
+          transport: 'stdio',
+          command: cfg['command'] as string,
+          args: (cfg['args'] as string[]) ?? [],
+          env: (cfg['env'] as Record<string, string>) ?? {},
+          enabled: cfg['enabled'] !== false,
+        };
+      }
     }
 
     const enabledCount = Object.values(servers).filter((s) => s.enabled).length;
