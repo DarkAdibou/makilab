@@ -27,7 +27,7 @@
  *   - E11: Code SubAgent git commit après write
  */
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { config } from '../config.ts';
@@ -139,6 +139,77 @@ export const obsidianSubAgent: SubAgent = {
         required: ['action'],
       },
     },
+    {
+      name: 'list',
+      description: 'Liste les fichiers et sous-dossiers dans un répertoire du vault. Utile pour naviguer sans deviner les chemins.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Chemin du dossier à lister (optionnel, défaut: racine du vault)' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'delete',
+      description: 'Supprime définitivement une note du vault.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Chemin de la note à supprimer (ex: Notes/brouillon.md)' },
+        },
+        required: ['path'],
+      },
+    },
+    {
+      name: 'patch',
+      description: 'Édite une note de façon chirurgicale : insère du contenu sous un heading spécifique ou modifie un champ frontmatter. Requiert Obsidian ouvert.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Chemin de la note à modifier' },
+          target_type: { type: 'string', description: '"heading" pour insérer sous un titre, "frontmatter" pour modifier les métadonnées', enum: ['heading', 'frontmatter'] },
+          target: { type: 'string', description: 'Nom exact du heading (ex: "## Todo") ou clé frontmatter (ex: "status")' },
+          operation: { type: 'string', description: '"append" (après), "prepend" (avant) ou "replace" (remplacer)', enum: ['append', 'prepend', 'replace'] },
+          content: { type: 'string', description: 'Contenu à insérer ou valeur du champ frontmatter' },
+        },
+        required: ['path', 'target_type', 'target', 'operation', 'content'],
+      },
+    },
+    {
+      name: 'open',
+      description: "Ouvre une note dans l'interface graphique Obsidian. Requiert Obsidian ouvert.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Chemin de la note à ouvrir dans Obsidian' },
+        },
+        required: ['path'],
+      },
+    },
+    {
+      name: 'commands',
+      description: 'Liste ou exécute des commandes Obsidian (Templater, QuickAdd, refresh Dataview...). Requiert Obsidian ouvert.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          command_id: { type: 'string', description: "ID de la commande à exécuter (ex: 'templater-obsidian:create-new-note-from-template'). Si vide, retourne la liste des commandes disponibles." },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'active',
+      description: "Lit ou ajoute du contenu à la note actuellement ouverte dans Obsidian. Requiert Obsidian ouvert.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', description: '"read" pour lire la note active, "append" pour y ajouter du contenu', enum: ['read', 'append'] },
+          content: { type: 'string', description: 'Contenu à ajouter (requis si action=append)' },
+        },
+        required: ['action'],
+      },
+    },
   ],
 
   async execute(action: string, input: Record<string, unknown>): Promise<SubAgentResult> {
@@ -168,6 +239,42 @@ export const obsidianSubAgent: SubAgent = {
       if (action === 'daily') {
         if (!live) return { success: false, text: 'Daily Note requiert Obsidian ouvert', error: 'Obsidian not running' };
         return await apiDailyNote(input['action'] as string, input['content'] as string | undefined);
+      }
+      if (action === 'list') {
+        const path = (input['path'] as string | undefined) ?? '';
+        return live
+          ? await apiListDir(path)
+          : await fileListDir(path);
+      }
+      if (action === 'delete') {
+        return live
+          ? await apiDeleteNote(input['path'] as string)
+          : await fileDeleteNote(input['path'] as string);
+      }
+      if (action === 'patch') {
+        if (!live) return { success: false, text: 'Patch requiert Obsidian ouvert', error: 'Obsidian not running' };
+        return await apiPatchNote(
+          input['path'] as string,
+          input['target_type'] as string,
+          input['target'] as string,
+          input['operation'] as string,
+          input['content'] as string,
+        );
+      }
+      if (action === 'open') {
+        if (!live) return { success: false, text: 'Open requiert Obsidian ouvert', error: 'Obsidian not running' };
+        return await apiOpenNote(input['path'] as string);
+      }
+      if (action === 'commands') {
+        if (!live) return { success: false, text: 'Commands requiert Obsidian ouvert', error: 'Obsidian not running' };
+        const commandId = input['command_id'] as string | undefined;
+        return commandId ? await apiRunCommand(commandId) : await apiListCommands();
+      }
+      if (action === 'active') {
+        if (!live) return { success: false, text: 'Active requiert Obsidian ouvert', error: 'Obsidian not running' };
+        return input['action'] === 'read'
+          ? await apiGetActive()
+          : await apiAppendActive(input['content'] as string);
       }
 
       return { success: false, text: `Action inconnue: ${action}`, error: `Unknown action: ${action}` };
@@ -259,6 +366,99 @@ async function apiDailyNote(action: string, content?: string): Promise<SubAgentR
   return { success: false, text: 'action doit être "read" ou "append"', error: 'Invalid action' };
 }
 
+async function apiListDir(path: string): Promise<SubAgentResult> {
+  const url = path
+    ? `${OBSIDIAN_BASE}/vault/${encodePath(path)}/`
+    : `${OBSIDIAN_BASE}/vault/`;
+  const r = await obsidianFetch(url, { headers: obsidianHeaders() });
+  if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
+  const data = await r.json() as { files: string[] };
+  const dirs = data.files.filter((f) => f.endsWith('/'));
+  const files = data.files.filter((f) => !f.endsWith('/'));
+  const label = path || 'racine';
+  return {
+    success: true,
+    text: `Contenu de "${label}" (${data.files.length} entrée(s)) :\nDossiers: ${dirs.join(', ') || 'aucun'}\nFichiers: ${files.join(', ') || 'aucun'}`,
+    data: { path: label, dirs, files },
+  };
+}
+
+async function apiDeleteNote(path: string): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`, {
+    method: 'DELETE', headers: obsidianHeaders(),
+  });
+  if (r.status === 404) return { success: false, text: `Note non trouvée: ${path}`, error: 'Not found' };
+  if (!r.ok) throw new Error(`Obsidian API ${r.status}`);
+  return { success: true, text: `Note supprimée: ${path}`, data: { path } };
+}
+
+async function apiPatchNote(
+  path: string, targetType: string, target: string,
+  operation: string, content: string,
+): Promise<SubAgentResult> {
+  const headers: Record<string, string> = {
+    ...obsidianHeaders('text/markdown'),
+    'Operation': operation,
+    'Target-Type': targetType,
+    'Target': encodeURIComponent(target),
+  };
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/vault/${encodePath(path)}`, {
+    method: 'PATCH', headers, body: content,
+  });
+  if (r.status === 404) return { success: false, text: `Note non trouvée: ${path}`, error: 'Not found' };
+  if (!r.ok) throw new Error(`Obsidian patch API ${r.status}`);
+  return { success: true, text: `Note "${path}" modifiée : ${operation} sous "${target}"`, data: { path, targetType, target, operation } };
+}
+
+async function apiOpenNote(path: string): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/open/${encodePath(path)}`, {
+    method: 'POST', headers: obsidianHeaders(),
+  });
+  if (!r.ok) throw new Error(`Obsidian open API ${r.status}`);
+  return { success: true, text: `Note "${path}" ouverte dans Obsidian`, data: { path } };
+}
+
+async function apiListCommands(): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/commands/`, { headers: obsidianHeaders() });
+  if (!r.ok) throw new Error(`Obsidian commands API ${r.status}`);
+  const data = await r.json() as { commands: Array<{ id: string; name: string }> };
+  const formatted = data.commands.map((c) => `- \`${c.id}\` — ${c.name}`).join('\n');
+  return {
+    success: true,
+    text: `${data.commands.length} commande(s) disponibles :\n${formatted}`,
+    data: data.commands,
+  };
+}
+
+async function apiRunCommand(commandId: string): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/commands/${encodeURIComponent(commandId)}/`, {
+    method: 'POST', headers: obsidianHeaders(),
+  });
+  if (r.status === 404) return { success: false, text: `Commande non trouvée: ${commandId}`, error: 'Not found' };
+  if (!r.ok) throw new Error(`Obsidian command API ${r.status}`);
+  return { success: true, text: `Commande exécutée: ${commandId}`, data: { commandId } };
+}
+
+async function apiGetActive(): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/active/`, { headers: obsidianHeaders() });
+  if (r.status === 404) return { success: false, text: 'Aucune note active dans Obsidian', error: 'No active file' };
+  if (!r.ok) throw new Error(`Obsidian active API ${r.status}`);
+  const content = await r.text();
+  return {
+    success: true,
+    text: `Note active :\n\n${content.substring(0, 3000)}${content.length > 3000 ? '\n…(tronqué)' : ''}`,
+    data: { content },
+  };
+}
+
+async function apiAppendActive(content: string): Promise<SubAgentResult> {
+  const r = await obsidianFetch(`${OBSIDIAN_BASE}/active/`, {
+    method: 'POST', headers: obsidianHeaders('text/markdown'), body: '\n' + content,
+  });
+  if (!r.ok) throw new Error(`Obsidian active append API ${r.status}`);
+  return { success: true, text: 'Contenu ajouté à la note active', data: {} };
+}
+
 // ── GIT FALLBACK (fichiers directs) ─────────────────────────────────────────
 
 function vaultPath(relativePath: string): string {
@@ -343,4 +543,38 @@ async function fileSearchVault(query: string, limit: number): Promise<SubAgentRe
     text: `${results.length} note(s) pour "${query}" (via fichiers):\n\n${formatted}`,
     data: results,
   };
+}
+
+async function fileListDir(relativePath: string): Promise<SubAgentResult> {
+  const vaultRoot = config.obsidianVaultPath;
+  if (!vaultRoot) return { success: false, text: 'OBSIDIAN_VAULT_PATH non configuré', error: 'Missing config' };
+  const dirPath = relativePath ? join(vaultRoot, relativePath) : vaultRoot;
+  try {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => `${e.name}/`);
+    const files = entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+    const label = relativePath || 'racine';
+    return {
+      success: true,
+      text: `Contenu de "${label}" (via fichiers) :\nDossiers: ${dirs.join(', ') || 'aucun'}\nFichiers: ${files.join(', ') || 'aucun'}`,
+      data: { path: label, dirs, files },
+    };
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { success: false, text: `Dossier non trouvé: ${relativePath}`, error: 'Not found' };
+    }
+    throw err;
+  }
+}
+
+async function fileDeleteNote(path: string): Promise<SubAgentResult> {
+  try {
+    await unlink(vaultPath(path));
+    return { success: true, text: `Note supprimée: ${path} (via fichier)`, data: { path } };
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { success: false, text: `Note non trouvée: ${path}`, error: 'Not found' };
+    }
+    throw err;
+  }
 }
