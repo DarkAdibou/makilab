@@ -44,6 +44,9 @@ Règles:
     // Force Anthropic for sensitive tasks
     if (parsed.sensitive) return 'claude-sonnet-4-6';
 
+    // Complex tasks that need tools require reliable tool calling → Sonnet only
+    if (parsed.complexity === 'complex' && parsed.needsTools) return 'claude-sonnet-4-6';
+
     // Map complexity + tools to task type for scoring
     let taskType: TaskType;
     if (parsed.complexity === 'complex') {

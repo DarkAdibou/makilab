@@ -21,6 +21,9 @@ export default function MemoryPage() {
   const [addingFact, setAddingFact] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
+  const [factFilter, setFactFilter] = useState('');
+  const [factsPage, setFactsPage] = useState(0);
+  const FACTS_PAGE_SIZE = 20;
 
   // ── Search ──
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,38 +246,66 @@ export default function MemoryPage() {
         {factsLoading ? (
           <p className="text-muted">Chargement...</p>
         ) : (
-          <div className="memory-facts-list">
-            {facts.map((fact) => (
-              <div key={fact.key} className="memory-fact-row">
-                {editingKey === fact.key ? (
+          <>
+            <input
+              className="textarea"
+              style={{ width: '100%', padding: '6px 10px', minHeight: 'auto', marginBottom: 12, boxSizing: 'border-box' }}
+              placeholder="Filtrer les faits..."
+              value={factFilter}
+              onChange={(e) => { setFactFilter(e.target.value); setFactsPage(0); }}
+            />
+            <div className="memory-facts-list">
+              {(() => {
+                const q = factFilter.toLowerCase();
+                const filtered = q
+                  ? facts.filter(f => f.key.toLowerCase().includes(q) || f.value.toLowerCase().includes(q))
+                  : facts;
+                const paged = filtered.slice(factsPage * FACTS_PAGE_SIZE, (factsPage + 1) * FACTS_PAGE_SIZE);
+                const totalPages = Math.ceil(filtered.length / FACTS_PAGE_SIZE);
+                return (
                   <>
-                    <input
-                      className="textarea"
-                      style={{ flex: 1, padding: '6px 10px', minHeight: 'auto' }}
-                      value={editKey}
-                      onChange={(e) => setEditKey(e.target.value)}
-                    />
-                    <input
-                      className="textarea"
-                      style={{ flex: 2, padding: '6px 10px', minHeight: 'auto' }}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                    />
-                    <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={handleSaveEdit}>OK</button>
-                    <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={() => setEditingKey(null)}>Annuler</button>
+                    {paged.map((fact) => (
+                      <div key={fact.key} className="memory-fact-row">
+                        {editingKey === fact.key ? (
+                          <>
+                            <input
+                              className="textarea"
+                              style={{ flex: 1, padding: '6px 10px', minHeight: 'auto' }}
+                              value={editKey}
+                              onChange={(e) => setEditKey(e.target.value)}
+                            />
+                            <input
+                              className="textarea"
+                              style={{ flex: 2, padding: '6px 10px', minHeight: 'auto' }}
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                            />
+                            <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={handleSaveEdit}>OK</button>
+                            <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={() => setEditingKey(null)}>Annuler</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="memory-fact-key">{fact.key}</span>
+                            <span className="memory-fact-value">{fact.value}</span>
+                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => handleStartEdit(fact)}>Modifier</button>
+                            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--destructive)' }} onClick={() => handleDeleteFact(fact.key)}>Supprimer</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {filtered.length === 0 && <p className="text-muted">Aucun fait trouvé</p>}
+                    {totalPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: '0.8125rem', color: 'var(--muted-foreground)' }}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }} disabled={factsPage === 0} onClick={() => setFactsPage(p => p - 1)}>←</button>
+                        <span>{factsPage * FACTS_PAGE_SIZE + 1}–{Math.min((factsPage + 1) * FACTS_PAGE_SIZE, filtered.length)} sur {filtered.length}</span>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }} disabled={factsPage >= totalPages - 1} onClick={() => setFactsPage(p => p + 1)}>→</button>
+                      </div>
+                    )}
                   </>
-                ) : (
-                  <>
-                    <span className="memory-fact-key">{fact.key}</span>
-                    <span className="memory-fact-value">{fact.value}</span>
-                    <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => handleStartEdit(fact)}>Modifier</button>
-                    <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--destructive)' }} onClick={() => handleDeleteFact(fact.key)}>Supprimer</button>
-                  </>
-                )}
-              </div>
-            ))}
-            {facts.length === 0 && <p className="text-muted">Aucun fait enregistre</p>}
-          </div>
+                );
+              })()}
+            </div>
+          </>
         )}
 
         {addingFact && (

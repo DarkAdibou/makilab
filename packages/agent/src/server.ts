@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt, getAllPermissions, setPermission } from './memory/sqlite.ts';
+import { checkAllCapabilities } from './subagents/health.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt, getAllPermissions, setPermission, isSubagentDisabled, setSubagentDisabled } from './memory/sqlite.ts';
 import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
@@ -11,6 +12,7 @@ import { getMcpStatus } from './mcp/bridge.ts';
 import { listAvailableModels } from './llm/pricing.ts';
 import { refreshCatalog, scoreModelsForTask, getOptimizationSuggestions } from './llm/catalog.ts';
 import { getWhatsAppStatus, sendWhatsAppMessage } from './whatsapp/gateway.ts';
+import { extractTextFromImage } from './ocr.ts';
 
 export async function buildServer() {
   const app = Fastify({ logger: false });
@@ -39,6 +41,22 @@ export async function buildServer() {
       })),
     }));
   });
+
+  // GET /api/subagents/health — live health checks for all capabilities
+  app.get('/api/subagents/health', async () => {
+    return checkAllCapabilities();
+  });
+
+  // PATCH /api/subagents/:name/enabled — toggle a subagent on/off
+  app.patch<{ Params: { name: string }; Body: { enabled: boolean } }>(
+    '/api/subagents/:name/enabled',
+    async (req, reply) => {
+      const { name } = req.params;
+      const { enabled } = req.body;
+      setSubagentDisabled(name, !enabled);
+      return { name, enabled, disabled: isSubagentDisabled(name) };
+    },
+  );
 
   // GET /api/messages
   app.get<{ Querystring: { channel?: string; limit?: string } }>(
@@ -118,18 +136,33 @@ export async function buildServer() {
     },
   );
 
+  // POST /api/ocr — extract text from an image (base64)
+  app.post<{ Body: { image: string; mimetype?: string } }>(
+    '/api/ocr',
+    async (req, reply) => {
+      const { image, mimetype = 'image/jpeg' } = req.body;
+      if (!image) return reply.status(400).send({ error: 'image required (base64)' });
+      const buffer = Buffer.from(image, 'base64');
+      const text = await extractTextFromImage(buffer, mimetype);
+      return { text, chars: text?.length ?? 0 };
+    },
+  );
+
   // POST /api/chat
   app.post<{ Body: { message: string; channel?: string; model?: string } }>(
     '/api/chat',
     async (req) => {
       const { message, channel = 'mission_control', model } = req.body;
-      const history = getRecentMessages(channel, 20);
+      const history = getRecentMessages('all', 30);
       const result = await runAgentLoop(message, {
         channel: channel as 'mission_control',
         from: 'mission_control',
         history,
         model,
       });
+      // Mirror response to WhatsApp if connected (fire-and-forget)
+      const { connected } = getWhatsAppStatus();
+      if (connected) sendWhatsAppMessage(result.reply).catch(() => {});
       return { reply: result.reply, costUsd: result.costUsd };
     },
   );
@@ -214,15 +247,21 @@ export async function buildServer() {
       });
 
       try {
+        const history = getRecentMessages('all', 30);
         const stream = runAgentLoopStreaming(message, {
           channel: channel as 'mission_control',
           from: 'mission_control',
-          history: [],
+          history,
           model,
         });
 
         for await (const event of stream) {
           reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          // Mirror full response to WhatsApp when stream completes
+          if (event.type === 'done') {
+            const { connected } = getWhatsAppStatus();
+            if (connected) sendWhatsAppMessage(event.fullText).catch(() => {});
+          }
         }
       } catch (err) {
         reply.raw.write(`data: ${JSON.stringify({ type: 'error', message: err instanceof Error ? err.message : String(err) })}\n\n`);

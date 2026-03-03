@@ -37,6 +37,7 @@ import { resolve } from 'node:path';
 import { exec } from 'node:child_process';
 import type { IncomingMessage, OutgoingMessage } from '@makilab/shared';
 import { transcribeAudio } from './transcriber.ts';
+import { extractTextFromImage } from '../ocr.ts';
 
 export type MessageHandler = (msg: IncomingMessage) => Promise<OutgoingMessage>;
 export type StatusHandler = (status: ConnectionStatus) => void;
@@ -188,6 +189,12 @@ export class WhatsAppSessionManager {
     });
 
     this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
+      // DIAGNOSTIC — voir exactement ce que Baileys livre (type, fromMe, from, hasBody)
+      console.log(`📬 messages.upsert type=${type} count=${messages.length}`);
+      for (const m of messages) {
+        console.log(`  → fromMe=${m.key.fromMe} from=${m.key.remoteJid} hasBody=${!!m.message}`);
+      }
+
       if (type !== 'notify') return;
 
       for (const msg of messages) {
@@ -257,8 +264,29 @@ export class WhatsAppSessionManager {
               continue;
             }
           } else {
-            this.processingMessages.delete(dedupKey);
-            continue;
+            // Check for image message — extract text via OCR
+            const imageMsg = msg.message.imageMessage;
+            if (imageMsg) {
+              console.log('🖼️ Image reçue, extraction OCR en cours...');
+              try {
+                const buffer = await downloadMediaMessage(msg as WAMessage, 'buffer', {});
+                const mimetype = imageMsg.mimetype || 'image/jpeg';
+                const extracted = await extractTextFromImage(buffer as Buffer, mimetype);
+                if (extracted) {
+                  const caption = imageMsg.caption ? `${imageMsg.caption}\n\n` : '';
+                  text = `[Image reçue — texte extrait]\n${caption}${extracted}`;
+                  console.log(`🖼️ OCR: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
+                } else {
+                  text = imageMsg.caption || '[Image reçue — aucun texte détecté]';
+                }
+              } catch (err) {
+                console.error('❌ Erreur OCR image:', err);
+                text = imageMsg.caption || '[Image reçue — erreur OCR]';
+              }
+            } else {
+              this.processingMessages.delete(dedupKey);
+              continue;
+            }
           }
         }
 

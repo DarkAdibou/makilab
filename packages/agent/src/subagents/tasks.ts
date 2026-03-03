@@ -45,7 +45,8 @@ export const tasksSubAgent: SubAgent = {
           due_at:          { type: 'string', description: 'Échéance ISO 8601 (optionnel)' },
           cron_expression: { type: 'string', description: 'Expression CRON pour tâches récurrentes (ex: "0 8 * * 1" = lundi 8h). Laisser vide pour une tâche ponctuelle.' },
           cron_prompt:     { type: 'string', description: 'Le prompt à exécuter automatiquement (pour tâches récurrentes OU planifiées one-shot avec due_at)' },
-          notify_channels: { type: 'array', items: { type: 'string' }, description: 'Canaux supplémentaires où envoyer le résultat (ex: ["whatsapp","mission_control"])' },
+          model:           { type: 'string', description: 'Modèle LLM à utiliser pour cette tâche (ex: claude-sonnet-4-6). Laisser vide pour auto-sélection.' },
+          notify_channels: { type: 'array', items: { type: 'string', description: 'Nom du canal' }, description: 'Canaux supplémentaires où envoyer le résultat (ex: ["whatsapp","mission_control"])' },
         },
         required: ['title', 'channel'],
       },
@@ -112,14 +113,16 @@ export const tasksSubAgent: SubAgent = {
           notifyChannels: input['notify_channels'] as string[] | undefined,
         });
         if (cronExpr) syncRecurringTasks();
-        // Auto-assign optimal model for recurring tasks
-        if (input['cron_prompt']) {
+        // Model selection: explicit > auto-classification
+        const explicitModel = input['model'] as string | undefined;
+        if (explicitModel) {
+          updateTask(id, { model: explicitModel });
+        } else if (input['cron_prompt']) {
+          // Auto-assign optimal model for recurring tasks (best-effort)
           try {
             const { classifyAndAssignModel } = await import('../llm/classify-task.ts');
             const model = await classifyAndAssignModel(input['cron_prompt'] as string);
-            if (model) {
-              updateTask(id, { model });
-            }
+            if (model) updateTask(id, { model });
           } catch { /* classification is best-effort */ }
         }
         logger.info({ taskId: id, title: input['title'], recurring: !!cronExpr }, 'Task created');

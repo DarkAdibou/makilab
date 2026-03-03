@@ -1728,6 +1728,23 @@ export function setAgentPrompt(prompt: string): void {
   getDb().prepare("INSERT OR REPLACE INTO memory_settings (key, value) VALUES ('agent_prompt', ?)").run(prompt);
 }
 
+/** Check if a subagent is disabled (user toggle) */
+export function isSubagentDisabled(name: string): boolean {
+  const key = `subagent_disabled:${name}`;
+  const row = getDb().prepare('SELECT value FROM memory_settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value === '1';
+}
+
+/** Enable or disable a subagent (persisted in memory_settings) */
+export function setSubagentDisabled(name: string, disabled: boolean): void {
+  const key = `subagent_disabled:${name}`;
+  if (disabled) {
+    getDb().prepare('INSERT OR REPLACE INTO memory_settings (key, value) VALUES (?, ?)').run(key, '1');
+  } else {
+    getDb().prepare('DELETE FROM memory_settings WHERE key = ?').run(key);
+  }
+}
+
 // ============================================================
 // Memory Retrievals (auto-retrieval event log)
 // ============================================================

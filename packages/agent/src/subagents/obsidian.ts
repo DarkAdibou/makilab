@@ -58,7 +58,7 @@ function obsidianHeaders(contentType?: string): Record<string, string> {
 }
 
 /** Check if Obsidian Local REST API is reachable */
-async function isObsidianLive(): Promise<boolean> {
+export async function isObsidianLive(): Promise<boolean> {
   try {
     const r = await obsidianFetch(`${OBSIDIAN_BASE}/`, {
       headers: obsidianHeaders(),

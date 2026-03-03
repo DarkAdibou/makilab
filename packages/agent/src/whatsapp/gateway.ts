@@ -22,8 +22,8 @@ export async function initWhatsApp(): Promise<void> {
     allowedNumber,
 
     async (msg: IncomingMessage): Promise<OutgoingMessage> => {
-      // Load history from SQLite (same as Mission Control)
-      const history = getRecentMessages('whatsapp', 20).map(m => ({
+      // Load cross-channel history for shared context (WhatsApp + Mission Control)
+      const history = getRecentMessages('all', 30).map(m => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       }));

@@ -19,6 +19,7 @@
 
 import type { SubAgent } from './types.ts';
 import { config } from '../config.ts';
+import { isSubagentDisabled } from '../memory/sqlite.ts';
 import { getTimeSubAgent } from './get-time.ts';
 import { webSubAgent } from './web.ts';
 import { karakeepSubAgent } from './karakeep.ts';
@@ -51,9 +52,9 @@ export function findSubAgent(name: string): SubAgent | undefined {
   return SUBAGENTS.find((sa) => sa.name === name);
 }
 
-/** Get all registered subagents */
+/** Get all registered subagents (excluding ones disabled by the user via toggle) */
 export function getAllSubAgents(): SubAgent[] {
-  return SUBAGENTS;
+  return SUBAGENTS.filter((sa) => !isSubagentDisabled(sa.name));
 }
 
 /**

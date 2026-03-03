@@ -178,6 +178,38 @@ export async function fetchMcpStatus(): Promise<McpServerStatus[]> {
   return res.json();
 }
 
+export interface CapabilityHealth {
+  name: string;
+  available: boolean;
+  mode?: string;
+  reason?: string;
+}
+
+export async function fetchSubagentHealth(): Promise<CapabilityHealth[]> {
+  const res = await fetch(`${API_BASE}/subagents/health`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function toggleSubagent(name: string, enabled: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/subagents/${name}/enabled`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
+export async function ocrImage(base64: string, mimetype: string): Promise<{ text: string | null; chars: number }> {
+  const res = await fetch(`${API_BASE}/ocr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64, mimetype }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
 export interface RecurringTaskInfo extends TaskInfo {
   stats: {
     totalRuns: number;

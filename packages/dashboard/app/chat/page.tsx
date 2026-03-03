@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi } from '../lib/api';
+import { fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi, ocrImage } from '../lib/api';
 import type { ModelInfo } from '../lib/api';
 
 interface Message {
@@ -54,6 +54,7 @@ export default function ChatPage() {
   const [iterationCount, setIterationCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchMessages('all', 50).then(setMessages).catch(() => {});
@@ -156,6 +157,29 @@ export default function ChatPage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1];
+      try {
+        const { text } = await ocrImage(base64, file.type || 'image/jpeg');
+        if (text) {
+          setInput((prev) => prev ? `${prev}\n\n[Image: ${file.name}]\n${text}` : `[Image: ${file.name}]\n${text}`);
+        } else {
+          setInput((prev) => prev ? `${prev}\n[Image: ${file.name} — aucun texte détecté]` : `[Image: ${file.name} — aucun texte détecté]`);
+        }
+      } catch {
+        setInput((prev) => prev ? `${prev}\n[Erreur OCR: ${file.name}]` : `[Erreur OCR: ${file.name}]`);
+      }
+    };
+    reader.readAsDataURL(file);
+    // Reset so same file can be re-selected
+    e.target.value = '';
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -233,6 +257,16 @@ export default function ChatPage() {
         </div>
       )}
       <div className="chat-input-area">
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '0 10px', fontSize: '1.1rem', flexShrink: 0 }}
+          title="Joindre une image (OCR)"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+        >
+          📎
+        </button>
         <textarea
           ref={textareaRef}
           className="textarea chat-textarea"
