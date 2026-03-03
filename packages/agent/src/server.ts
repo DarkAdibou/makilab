@@ -58,11 +58,8 @@ export async function buildServer() {
     },
   );
 
-  // GET /api/skills — list all available skills with enabled state
+  // GET /api/skills — list all available skills with enabled state (scans disk, no cache)
   app.get('/api/skills', async () => {
-    const { loadSkills, invalidateSkillsCache } = await import('./skills/loader.ts');
-    // Force reload to include disabled ones — we need to scan disk for all skills
-    invalidateSkillsCache();
     const { readFileSync, readdirSync, existsSync } = await import('node:fs');
     const { join, dirname } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
@@ -89,8 +86,6 @@ export async function buildServer() {
         } catch { /* skip malformed */ }
       }
     }
-    // Restore cache with only enabled skills
-    loadSkills();
     return result;
   });
 
