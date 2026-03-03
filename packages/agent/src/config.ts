@@ -65,6 +65,13 @@ export const config = {
   // Code SubAgent (E11)
   codeRepoRoot: optional('CODE_REPO_ROOT', rootDir),
   makilabEnv: optional('MAKILAB_ENV', 'development'),
+
+  // Google Maps Grounding Lite (MCP HTTP)
+  googleMapsApiKey: optional('GOOGLE_MAPS_API_KEY', ''),
+
+  // Google Workspace MCP (OAuth2)
+  googleOAuthClientId: optional('GOOGLE_OAUTH_CLIENT_ID', ''),
+  googleOAuthClientSecret: optional('GOOGLE_OAUTH_CLIENT_SECRET', ''),
 } as const;
 
 /**
@@ -93,6 +100,8 @@ export function validateConfig(log: { fatal: (obj: object, msg: string) => void;
   if (!process.env['QDRANT_URL']) optionalWarnings.push('QDRANT_URL (semantic memory disabled)');
   if (!process.env['VOYAGE_API_KEY']) optionalWarnings.push('VOYAGE_API_KEY (semantic memory disabled)');
   if (!process.env['OPENAI_API_KEY']) optionalWarnings.push('OPENAI_API_KEY (whisper transcription disabled)');
+  if (!process.env['GOOGLE_MAPS_API_KEY']) optionalWarnings.push('GOOGLE_MAPS_API_KEY (google maps MCP disabled)');
+  if (!process.env['GOOGLE_OAUTH_CLIENT_ID']) optionalWarnings.push('GOOGLE_OAUTH_CLIENT_ID (google workspace MCP disabled)');
 
   for (const w of optionalWarnings) {
     log.warn({ missing: w }, 'Optional env var not set');

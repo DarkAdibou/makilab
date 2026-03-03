@@ -12,5 +12,22 @@
     "args": ["-y", "@modelcontextprotocol/server-everything"],
     "env": {},
     "enabled": true
+  },
+  "google-maps": {
+    "transport": "http",
+    "url": "https://mapstools.googleapis.com/mcp",
+    "headers": {
+      "X-Goog-Api-Key": "${GOOGLE_MAPS_API_KEY}"
+    },
+    "enabled": true
+  },
+  "google-workspace": {
+    "command": "uvx",
+    "args": ["workspace-mcp", "--tool-tier", "core"],
+    "env": {
+      "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
+      "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}"
+    },
+    "enabled": true
   }
 }
