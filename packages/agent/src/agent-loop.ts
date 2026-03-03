@@ -190,10 +190,15 @@ export async function runAgentLoop(
   const historyToUse = sqliteHistory.length > 0 ? sqliteHistory : (context.history ?? []);
 
   const messages: Anthropic.MessageParam[] = [
-    ...historyToUse.map((h) => ({
-      role: h.role as 'user' | 'assistant',
-      content: h.content,
-    })),
+    ...historyToUse.map((h) => {
+      const ch = (h as { channel?: string }).channel;
+      return {
+        role: h.role as 'user' | 'assistant',
+        content: ch && ch !== 'mission_control'
+          ? `[${ch.charAt(0).toUpperCase() + ch.slice(1)}] ${h.content}`
+          : h.content,
+      };
+    }),
     { role: 'user', content: userMessage },
   ];
 
