@@ -156,6 +156,7 @@ function initSchema(db: DatabaseSync): void {
   migrateLlmModelsAddDescription(db);
   migrateAddDeepSearchRoute(db);
   migrateFixCronTaskRoute(db);
+  migrateAddCronComplexityRoutes(db);
   migrateMessagesAddModel(db);
   migratePermissions(db);
 }
@@ -659,6 +660,19 @@ function migrateFixCronTaskRoute(db: DatabaseSync): void {
 
   db.prepare("UPDATE llm_route_config SET model_id = 'claude-haiku-4-5-20251001' WHERE task_type = 'cron_task'").run();
   db.prepare("INSERT INTO _migrations (name) VALUES ('fix_cron_task_route_haiku')").run();
+}
+
+function migrateAddCronComplexityRoutes(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_cron_complexity_routes'"
+  ).get();
+  if (existing) return;
+
+  db.prepare("INSERT OR IGNORE INTO llm_route_config (task_type, model_id) VALUES ('cron_simple', 'claude-haiku-4-5-20251001')").run();
+  db.prepare("INSERT OR IGNORE INTO llm_route_config (task_type, model_id) VALUES ('cron_moderate', 'claude-haiku-4-5-20251001')").run();
+  // Ensure cron_task stays on Sonnet (overwrite the haiku migration that was applied earlier)
+  db.prepare("UPDATE llm_route_config SET model_id = 'claude-sonnet-4-6' WHERE task_type = 'cron_task'").run();
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_cron_complexity_routes')").run();
 }
 
 function migrateMessagesAddModel(db: DatabaseSync): void {
@@ -1656,7 +1670,7 @@ Tu aides ton utilisateur (Adrien) avec ses tâches quotidiennes : emails, recher
 - Pas d'emojis sauf si le contexte s'y prête (WhatsApp OK, résumés non)
 
 ## Contexte multi-canal
-Ton historique peut inclure des échanges de plusieurs canaux (WhatsApp, Gmail...). Les messages d'autres canaux sont préfixés `[NomCanal]`. Maintiens la continuité du contexte entre canaux — si l'utilisateur poursuit depuis Mission Control une conversation commencée sur WhatsApp, réfère-toi à l'historique visible.
+Ton historique peut inclure des échanges de plusieurs canaux (WhatsApp, Gmail...). Les messages d'autres canaux sont préfixés [NomCanal]. Maintiens la continuité du contexte entre canaux — si l'utilisateur poursuit depuis Mission Control une conversation commencée sur WhatsApp, réfère-toi à l'historique visible.
 
 ## Principes fondamentaux
 - Tu ne fais que ce qui t'est explicitement autorisé (whitelist)

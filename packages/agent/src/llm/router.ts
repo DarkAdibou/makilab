@@ -1,7 +1,7 @@
 import { config } from '../config.ts';
 import { getRouteForTaskType, getMemorySettings } from '../memory/sqlite.ts';
 
-export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_task' | 'orchestration' | 'deep_search';
+export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_simple' | 'cron_moderate' | 'cron_task' | 'orchestration' | 'deep_search';
 
 interface ModelRoute {
   provider: 'anthropic' | 'openrouter';
@@ -14,6 +14,8 @@ const FALLBACK_ROUTES: Record<TaskType, ModelRoute> = {
   compaction:       { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   fact_extraction:  { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   classification:   { provider: 'openrouter',  model: 'google/gemini-2.0-flash-001' },
+  cron_simple:      { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
+  cron_moderate:    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   cron_task:        { provider: 'anthropic',   model: 'claude-sonnet-4-6' },
   orchestration:    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   deep_search:      { provider: 'openrouter',  model: 'perplexity/sonar-pro' },

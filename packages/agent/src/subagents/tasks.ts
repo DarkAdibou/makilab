@@ -45,8 +45,21 @@ export const tasksSubAgent: SubAgent = {
           channel:         { type: 'string', description: 'Canal origine (whatsapp, cli...)' },
           due_at:          { type: 'string', description: 'Échéance ISO 8601 (optionnel)' },
           cron_expression: { type: 'string', description: 'Expression CRON pour tâches récurrentes (ex: "0 8 * * 1" = lundi 8h). Laisser vide pour une tâche ponctuelle.' },
-          cron_prompt:     { type: 'string', description: 'Le prompt à exécuter automatiquement (pour tâches récurrentes OU planifiées one-shot avec due_at)' },
-          model:           { type: 'string', description: 'Modèle LLM à utiliser pour cette tâche (ex: claude-sonnet-4-6). Laisser vide pour auto-sélection.' },
+          cron_prompt:     {
+            type: 'string',
+            description: 'Prompt d\'ACTION AUTONOME exécuté par un agent indépendant, sans contexte de cette conversation. ' +
+              'OBLIGATOIRE pour tâches planifiées (due_at) et récurrentes (cron_expression). ' +
+              'Format CORRECT : "Récupère la météo actuelle de Paris et envoie-la via WhatsApp." ' +
+              'Format INCORRECT : "Je vais créer une tâche pour...", "Cette tâche va...". ' +
+              'Niveaux de complexité (détermine le modèle LLM utilisé) : ' +
+              'simple = action unique avec 1 outil (météo, rappel, timer) ; ' +
+              'moderate = 2-3 sources ou synthèse (briefing, résumé emails) ; ' +
+              'complex = recherche web + analyse, multi-étapes, décision. ' +
+              'En cas de doute : simple↔moderate → choisir moderate ; moderate↔complex → choisir complex. ' +
+              'Si la tâche semble dépasser le niveau complex, demander confirmation à l\'utilisateur avant de créer.',
+          },
+          complexity:      { type: 'string', description: 'Niveau de complexité estimé : simple, moderate ou complex. Utilisé pour sélectionner le modèle LLM optimal.', enum: ['simple', 'moderate', 'complex'] },
+          model:           { type: 'string', description: 'Modèle LLM à utiliser pour cette tâche (ex: claude-sonnet-4-6). Laisser vide pour auto-sélection selon complexity.' },
           notify_channels: { type: 'array', items: { type: 'string', description: 'Nom du canal' }, description: 'Canaux supplémentaires où envoyer le résultat (ex: ["whatsapp","mission_control"])' },
         },
         required: ['title', 'channel'],
@@ -113,6 +126,23 @@ export const tasksSubAgent: SubAgent = {
     try {
       if (action === 'create') {
         const cronExpr = input['cron_expression'] as string | undefined;
+        const cronPrompt = input['cron_prompt'] as string | undefined;
+
+        // Guard: reject intention text — cron_prompt must be an autonomous action prompt
+        if (cronPrompt) {
+          const INTENTION_PREFIXES = ['je vais', 'cette tâche', 'i will', 'this task will', 'je vais maintenant', 'je vais créer'];
+          const lower = cronPrompt.trim().toLowerCase();
+          if (INTENTION_PREFIXES.some(p => lower.startsWith(p))) {
+            return {
+              success: false,
+              text: 'cron_prompt invalide : doit être un prompt d\'ACTION AUTONOME, pas une description d\'intention. ' +
+                'Exemple correct : "Récupère la météo actuelle de Paris et envoie-la à l\'utilisateur via WhatsApp." ' +
+                'Exemple incorrect : "Je vais créer une tâche pour donner la météo..."',
+              error: 'invalid_cron_prompt',
+            };
+          }
+        }
+
         const id = createTask({
           title: input['title'] as string,
           createdBy: 'user',
@@ -121,19 +151,20 @@ export const tasksSubAgent: SubAgent = {
           dueAt: input['due_at'] as string | undefined,
           cronExpression: cronExpr,
           cronEnabled: !!cronExpr,
-          cronPrompt: input['cron_prompt'] as string | undefined,
+          cronPrompt,
           notifyChannels: input['notify_channels'] as string[] | undefined,
         });
         if (cronExpr) syncRecurringTasks();
-        // Model selection: explicit > auto-classification
+        // Model selection: explicit > auto-classification (uses complexity hint if provided)
         const explicitModel = input['model'] as string | undefined;
         if (explicitModel) {
           updateTask(id, { model: explicitModel });
-        } else if (input['cron_prompt']) {
+        } else if (cronPrompt) {
           // Auto-assign optimal model for recurring tasks (best-effort)
           try {
             const { classifyAndAssignModel } = await import('../llm/classify-task.ts');
-            const model = await classifyAndAssignModel(input['cron_prompt'] as string);
+            const complexityHint = input['complexity'] as 'simple' | 'moderate' | 'complex' | undefined;
+            const model = await classifyAndAssignModel(cronPrompt, complexityHint);
             if (model) updateTask(id, { model });
           } catch { /* classification is best-effort */ }
         }

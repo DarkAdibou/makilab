@@ -167,6 +167,9 @@ export function startCron(): void {
             taskType: 'cron_task',
           });
           const durationMs = Date.now() - start;
+          if (!reply || reply.trim().length === 0) {
+            throw new Error('Agent returned empty reply');
+          }
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
           updateTaskStatus(task.id, 'done');
@@ -217,6 +220,9 @@ export function syncRecurringTasks(): void {
             taskType: 'cron_task',
           });
           const durationMs = Date.now() - start;
+          if (!reply || reply.trim().length === 0) {
+            throw new Error('Agent returned empty reply');
+          }
           const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
           logTaskExecution({
             taskId: task.id,
@@ -269,6 +275,10 @@ export async function executeRecurringTask(task: { id: string; title?: string; c
       taskType: 'cron_task',
     });
     const durationMs = Date.now() - start;
+    if (!reply || reply.trim().length === 0) {
+      logTaskExecution({ taskId: task.id, status: 'error', durationMs, errorMessage: 'Agent returned empty reply' });
+      return { success: false, durationMs, error: 'Agent returned empty reply' };
+    }
     const summary = reply.length > 500 ? reply.slice(0, 500) + '…' : reply;
     logTaskExecution({ taskId: task.id, status: 'success', durationMs, resultSummary: summary });
 
