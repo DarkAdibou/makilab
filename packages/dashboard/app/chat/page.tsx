@@ -50,6 +50,8 @@ export default function ChatPage() {
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [agentStatus, setAgentStatus] = useState<'idle' | 'thinking' | 'working'>('idle');
+  const [iterationCount, setIterationCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -83,11 +85,19 @@ export default function ChatPage() {
 
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    setAgentStatus('thinking');
+    setIterationCount(0);
 
     try {
       let fullContent = '';
       for await (const event of sendMessageStreamWithModel(text, 'mission_control', selectedModel || undefined)) {
-        if (event.type === 'text_delta') {
+        if (event.type === 'thinking') {
+          setAgentStatus('thinking');
+        } else if (event.type === 'iteration') {
+          setAgentStatus('working');
+          setIterationCount((event as Record<string, unknown>).n as number);
+        } else if (event.type === 'text_delta') {
+          setAgentStatus('idle');
           fullContent += event.content ?? '';
           const captured = fullContent;
           setMessages(prev => {
@@ -134,6 +144,8 @@ export default function ChatPage() {
       });
     }
 
+    setAgentStatus('idle');
+    setIterationCount(0);
     setLoading(false);
   };
 
@@ -184,7 +196,10 @@ export default function ChatPage() {
             )}
             {m.role === 'assistant' ? (
               <>
-                <ReactMarkdown>{m.content || '...'}</ReactMarkdown>
+                {m.content
+                  ? <ReactMarkdown>{m.content}</ReactMarkdown>
+                  : <span className="typing-dots"><span /><span /><span /></span>
+                }
                 {m.model && (
                   <span className="chat-cost-badge" title={m.costUsd && m.costUsd > 0 ? `Cout total : $${m.costUsd.toFixed(6)}` : 'Modèle gratuit ou non facturé'}>
                     <span className="chat-model-name">{m.model}</span>
@@ -209,6 +224,14 @@ export default function ChatPage() {
         )}
         <div ref={bottomRef} />
       </div>
+      {agentStatus !== 'idle' && (
+        <div className="agent-status">
+          <span className="agent-status-spinner" />
+          {agentStatus === 'thinking' && 'Analyse…'}
+          {agentStatus === 'working' && iterationCount > 1 && `Itération ${iterationCount}…`}
+          {agentStatus === 'working' && iterationCount <= 1 && 'Traitement…'}
+        </div>
+      )}
       <div className="chat-input-area">
         <textarea
           ref={textareaRef}

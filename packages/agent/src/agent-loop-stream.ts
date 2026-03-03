@@ -57,6 +57,8 @@ function buildToolList(): Anthropic.Tool[] {
 }
 
 export type StreamEvent =
+  | { type: 'thinking' }
+  | { type: 'iteration'; n: number }
   | { type: 'text_delta'; content: string }
   | { type: 'tool_start'; name: string; args?: Record<string, unknown> }
   | { type: 'tool_end'; name: string; success: boolean; result?: string }
@@ -72,6 +74,9 @@ export async function* runAgentLoopStreaming(
   userMessage: string,
   context: AgentContext,
 ): AsyncGenerator<StreamEvent> {
+  // Signal immédiat — avant tout chargement mémoire/LLM
+  yield { type: 'thinking' };
+
   const channel = context.channel ?? 'cli';
 
   // ── Memory context ──────────────────────────────────────────────────────
@@ -117,6 +122,7 @@ export async function* runAgentLoopStreaming(
   try {
     while (iterations < config.agentMaxIterations) {
       iterations++;
+      yield { type: 'iteration', n: iterations };
 
       const streamResult = await llm.stream({
         taskType: ((context.taskType ?? 'conversation') as TaskType),

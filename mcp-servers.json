@@ -3,15 +3,12 @@
   "_comment": "MCP servers for Makilab. Each key is a server name, value is spawn config.",
   "notebooklm": {
     "command": "npx",
-    "args": ["-y", "notebooklm-mcp"],
+    "args": [
+      "-y",
+      "notebooklm-mcp"
+    ],
     "env": {},
     "enabled": false
-  },
-  "mcp-test": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-everything"],
-    "env": {},
-    "enabled": true
   },
   "google-maps": {
     "transport": "http",
@@ -25,12 +22,17 @@
     "command": "uvx",
     "args": [
       "workspace-mcp",
-      "--tool-tier", "core",
-      "--permissions", "gmail:readonly", "calendar:readonly", "drive:readonly"
+      "--tool-tier",
+      "core",
+      "--permissions",
+      "gmail:readonly",
+      "calendar:full",
+      "drive:readonly"
     ],
     "env": {
       "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
-      "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}"
+      "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}",
+      "PYTHONIOENCODING": "utf-8"
     },
     "enabled": true
   }

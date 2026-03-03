@@ -216,9 +216,13 @@ export class WhatsAppSessionManager {
         const from = msg.key.remoteJid ?? '';
 
         // SECURITY: strict whitelist — silently ignore unauthorized numbers
-        if (from !== this.allowedNumber) {
+        // Compare by stripping @domain suffix to handle LID vs JID format mismatch
+        // (Baileys may deliver as @s.whatsapp.net while .env has @lid or vice versa)
+        const fromNumber = from.split('@')[0];
+        const allowedNumber = this.allowedNumber.split('@')[0];
+        if (fromNumber !== allowedNumber) {
           console.log(`🚫 Message ignoré — numéro non autorisé: ${from}`);
-          return;
+          continue; // Use continue, not return — don't abort the whole batch
         }
 
         // Extract text — handle audio messages via Whisper transcription

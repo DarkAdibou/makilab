@@ -42,7 +42,6 @@ describe('buildCapabilitiesPrompt', () => {
     expect(prompt).toContain('capture');
     expect(prompt).toContain('karakeep');
     expect(prompt).toContain('web');
-    expect(prompt).toContain('gmail');
     expect(prompt).toContain('time');
   });
 

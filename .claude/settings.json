@@ -57,7 +57,20 @@
       "Bash(git status:*)",
       "Bash(npx next lint)",
       "Bash(pnpm --filter @makilab/dashboard add geist lucide-react)",
-      "WebFetch(domain:openrouter.ai)"
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(timeout 10 cat:*)",
+      "Bash(pnpm --filter @makilab/shared build:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(python:*)",
+      "WebFetch(domain:developers.google.com)",
+      "Read(//c/Users/adrie/AppData/Local/pnpm-cache/**)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git merge:*)",
+      "Bash(git branch:*)",
+      "Bash(cmd /c \"netstat -ano | findstr :8000\")",
+      "Bash(uvx workspace-mcp:*)"
     ],
     "additionalDirectories": [
       "d:\\SynologyDrive\\IA et agents\\makilab\\docs",

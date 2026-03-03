@@ -943,6 +943,48 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ─── Agent status bar ─── */
+.agent-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 4px 16px 6px;
+  opacity: 0.75;
+}
+.agent-status-spinner {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ─── Typing dots (bulle assistant en attente) ─── */
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px 0;
+  align-items: center;
+}
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typing-bounce 1.2s infinite ease-in-out;
+  opacity: 0.4;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
 /* ─── Tags ─── */
 .kanban-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .tag-badge { display: inline-flex; padding: 1px 8px; border-radius: 9999px; font-size: 0.6875rem; font-weight: 500; color: white; }

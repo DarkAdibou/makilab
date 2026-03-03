@@ -403,6 +403,23 @@ async function* streamOpenRouter(
             if (tc.function?.arguments) existing.args += tc.function.arguments;
           }
         }
+        // Yield so pumpPromise receives the chunk and can parse tool_calls
+        yield {
+          event: {
+            type: 'content_block_delta',
+            index: contentBlockIndex,
+            delta: { type: 'input_json_delta', partial_json: '' },
+          } as unknown as Anthropic.RawMessageStreamEvent,
+          chunk,
+        };
+      }
+
+      // Yield final chunks with finish_reason/usage even if no content delta
+      if (!delta.content && !delta.tool_calls && (chunk.choices?.[0]?.finish_reason || chunk.usage)) {
+        yield {
+          event: { type: 'message_delta', delta: {}, usage: chunk.usage } as unknown as Anthropic.RawMessageStreamEvent,
+          chunk,
+        };
       }
     }
   }
@@ -441,7 +458,7 @@ export function createLlmClient(): LlmClient {
   return {
     async chat(request: LlmRequest): Promise<LlmResponse> {
       const route = resolveModel(request.taskType, request.model);
-      const maxTokens = request.maxTokens ?? 4096;
+      const maxTokens = request.maxTokens ?? 8192;
       const start = Date.now();
 
       // For OpenRouter, flatten systemBlocks to a plain string
@@ -485,7 +502,7 @@ export function createLlmClient(): LlmClient {
 
     async stream(request: LlmRequest) {
       const route = resolveModel(request.taskType, request.model);
-      const maxTokens = request.maxTokens ?? 4096;
+      const maxTokens = request.maxTokens ?? 8192;
       const start = Date.now();
 
       // For OpenRouter, flatten systemBlocks to a plain string
@@ -576,7 +593,7 @@ export function createLlmClient(): LlmClient {
             // Fallback: if stream produced no text and no tool calls, retry non-streaming
             if (!currentText && toolCallBuilders.size === 0) {
               logger.warn({ model: route.model }, 'OpenRouter stream produced no content, falling back to non-streaming');
-              const fallback = await callOpenRouter(route.model, request.messages, request.system, maxTokens, request.tools);
+              const fallback = await callOpenRouter(route.model, request.messages, systemForOrStream, maxTokens, request.tools);
               totalInputTokens = fallback.inputTokens;
               totalOutputTokens = fallback.outputTokens;
               const durationMs = Date.now() - start;
