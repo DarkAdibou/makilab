@@ -8,6 +8,17 @@ import { loadMcpServersConfig, type McpServerConfig } from './config.ts';
 const MCP_TOOL_PREFIX = 'mcp_';
 const MCP_SEP = '__';
 
+const TOOL_DESCRIPTION_HINTS: Record<string, string> = {
+  'google-maps__compute_routes':
+    ' IMPORTANT: origin and destination must be Waypoint objects: {"address": "Lyon, France"} — NOT plain strings.',
+};
+
+function enrichToolDescription(server: string, toolName: string, description: string): string {
+  const key = `${server}__${toolName}`;
+  const hint = TOOL_DESCRIPTION_HINTS[key] ?? '';
+  return `[MCP:${server}]${hint} ${description}`;
+}
+
 interface McpConnection {
   client: Client;
   transport: StdioClientTransport | StreamableHTTPClientTransport;
@@ -92,7 +103,7 @@ async function connectServer(name: string, cfg: McpServerConfig): Promise<void> 
     for (const tool of result.tools) {
       tools.push({
         name: `${MCP_TOOL_PREFIX}${name}${MCP_SEP}${tool.name}`,
-        description: `[MCP:${name}] ${tool.description ?? tool.name}`,
+        description: enrichToolDescription(name, tool.name, tool.description ?? tool.name),
         input_schema: tool.inputSchema as Anthropic.Tool['input_schema'],
       });
     }
@@ -110,10 +121,15 @@ async function connectServer(name: string, cfg: McpServerConfig): Promise<void> 
     conn.tools = [];
   };
 
+  const isHttpTransport = cfg.transport === 'http';
   transport.onerror = (err) => {
     logger.warn({ server: name, err: err instanceof Error ? err.message : String(err) }, 'MCP server transport error');
-    conn.connected = false;
-    conn.tools = [];
+    // HTTP transport errors can be tool-level errors (bad params, API errors) — don't disconnect.
+    // Only stdio transport errors indicate real process disconnection.
+    if (!isHttpTransport) {
+      conn.connected = false;
+      conn.tools = [];
+    }
   };
 }
 

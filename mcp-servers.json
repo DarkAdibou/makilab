@@ -23,7 +23,11 @@
   },
   "google-workspace": {
     "command": "uvx",
-    "args": ["workspace-mcp", "--tool-tier", "core"],
+    "args": [
+      "workspace-mcp",
+      "--tool-tier", "core",
+      "--permissions", "gmail:readonly", "calendar:readonly", "drive:readonly"
+    ],
     "env": {
       "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",
       "GOOGLE_OAUTH_CLIENT_SECRET": "${GOOGLE_OAUTH_CLIENT_SECRET}"

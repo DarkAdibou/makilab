@@ -23,7 +23,6 @@ import { getTimeSubAgent } from './get-time.ts';
 import { webSubAgent } from './web.ts';
 import { karakeepSubAgent } from './karakeep.ts';
 import { obsidianSubAgent } from './obsidian.ts';
-import { gmailSubAgent } from './gmail.ts';
 import { captureSubAgent } from './capture.ts';
 import { tasksSubAgent } from './tasks.ts';
 import { homeassistantSubAgent } from './homeassistant.ts';
@@ -38,7 +37,6 @@ const SUBAGENTS: SubAgent[] = [
   webSubAgent,
   karakeepSubAgent,
   obsidianSubAgent,
-  gmailSubAgent,
   captureSubAgent,
   tasksSubAgent,
   ...(config.haUrl ? [homeassistantSubAgent] : []),
