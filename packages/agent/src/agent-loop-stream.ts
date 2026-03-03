@@ -18,7 +18,9 @@ import {
   saveMessage,
   logAgentEvent,
   getAgentPrompt,
+  checkPermission,
 } from './memory/sqlite.ts';
+import { wasJustConfirmed } from './agent-loop.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
@@ -208,15 +210,24 @@ export async function* runAgentLoopStreaming(
               resultContent = `Erreur : subagent "${subagentName}" introuvable`;
               success = false;
             } else {
-              logger.info({ subagent: subagentName, action: actionName }, 'Subagent call');
-              const result = await subagent.execute(
-                actionName ?? '',
-                block.input as Record<string, unknown>,
-              );
-              resultContent = result.text;
-              if (!result.success && result.error) {
-                resultContent += `\nErreur: ${result.error}`;
+              const permission = checkPermission(subagentName ?? '', actionName ?? '');
+              if (permission === 'denied') {
+                resultContent = `Action refusée : ${block.name} n'est pas autorisée.`;
                 success = false;
+              } else if (permission === 'confirm_required' && !wasJustConfirmed(messages)) {
+                resultContent = `⚠️ CONFIRMATION REQUISE — L'action ${block.name} (${JSON.stringify(block.input)}) nécessite ta confirmation. Réponds "oui" pour confirmer ou "non" pour annuler.`;
+              } else {
+                // 'allowed' OU confirmé → exécuter normalement
+                logger.info({ subagent: subagentName, action: actionName }, 'Subagent call');
+                const result = await subagent.execute(
+                  actionName ?? '',
+                  block.input as Record<string, unknown>,
+                );
+                resultContent = result.text;
+                if (!result.success && result.error) {
+                  resultContent += `\nErreur: ${result.error}`;
+                  success = false;
+                }
               }
             }
           } else {

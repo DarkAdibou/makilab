@@ -36,6 +36,7 @@ import {
   deleteMessagesUpTo,
   saveSummary,
   getAgentPrompt,
+  checkPermission,
 } from './memory/sqlite.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
@@ -46,6 +47,31 @@ import { logger } from './logger.ts';
 import type { AgentContext } from '@makilab/shared';
 
 const llm = createLlmClient();
+
+const CONFIRM_WORDS = new Set(['oui', 'yes', 'ok', 'confirme', 'go', 'yep', 'ouais', 'affirmatif', 'proceed']);
+
+/**
+ * Détecte si le dernier message utilisateur (avec du texte) est une confirmation.
+ * Ignore les messages composés uniquement de tool_results.
+ */
+export function wasJustConfirmed(messages: Anthropic.MessageParam[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'user') continue;
+    // Extraire le texte du message (content peut être string ou array)
+    let text = '';
+    if (typeof msg.content === 'string') {
+      text = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      const textBlocks = msg.content.filter(b => b.type === 'text');
+      if (textBlocks.length === 0) continue; // uniquement des tool_results — ignorer
+      text = textBlocks.map(b => ('text' in b ? b.text : '')).join(' ');
+    }
+    const normalized = text.trim().toLowerCase().replace(/[!.?]+$/, '');
+    return CONFIRM_WORDS.has(normalized);
+  }
+  return false;
+}
 
 const COMPACTION_THRESHOLD = 30;
 const COMPACT_KEEP_RECENT = 20;
@@ -222,17 +248,22 @@ export async function runAgentLoop(
           if (!subagent) {
             resultContent = `Erreur : subagent "${subagentName}" introuvable`;
           } else {
-            // TODO (E3): Check permissions before executing
-            // if (permission === 'denied') { resultContent = 'Action refusée'; }
-            // if (permission === 'confirm') { /* ask user */ }
-            logger.info({ subagent: subagentName, action: actionName }, 'Subagent call');
-            const result = await subagent.execute(
-              actionName ?? '',
-              block.input as Record<string, unknown>,
-            );
-            resultContent = result.text;
-            if (!result.success && result.error) {
-              resultContent += `\nErreur: ${result.error}`;
+            const permission = checkPermission(subagentName ?? '', actionName ?? '');
+            if (permission === 'denied') {
+              resultContent = `Action refusée : ${block.name} n'est pas autorisée.`;
+            } else if (permission === 'confirm_required' && !wasJustConfirmed(messages)) {
+              resultContent = `⚠️ CONFIRMATION REQUISE — L'action ${block.name} (${JSON.stringify(block.input)}) nécessite ta confirmation. Réponds "oui" pour confirmer ou "non" pour annuler.`;
+            } else {
+              // 'allowed' OU confirmé → exécuter normalement
+              logger.info({ subagent: subagentName, action: actionName }, 'Subagent call');
+              const result = await subagent.execute(
+                actionName ?? '',
+                block.input as Record<string, unknown>,
+              );
+              resultContent = result.text;
+              if (!result.success && result.error) {
+                resultContent += `\nErreur: ${result.error}`;
+              }
             }
           }
         } else {

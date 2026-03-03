@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt, getAllPermissions, setPermission } from './memory/sqlite.ts';
 import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
@@ -499,6 +499,25 @@ export async function buildServer() {
   app.get<{ Querystring: { limit?: string } }>('/api/memory/retrievals', async (req) => {
     const limit = parseInt(req.query.limit ?? '20', 10);
     return getMemoryRetrievals(limit);
+  });
+
+  // GET /api/permissions — liste toutes les permissions définies
+  app.get('/api/permissions', async () => {
+    return getAllPermissions();
+  });
+
+  // PUT /api/permissions/:subagent/:action — définit ou met à jour une permission
+  app.put<{
+    Params: { subagent: string; action: string };
+    Body: { level: 'allowed' | 'denied' | 'confirm_required' };
+  }>('/api/permissions/:subagent/:action', async (req) => {
+    const { subagent, action } = req.params;
+    const { level } = req.body;
+    if (!['allowed', 'denied', 'confirm_required'].includes(level)) {
+      throw new Error('level must be allowed, denied, or confirm_required');
+    }
+    setPermission(subagent, action, level);
+    return { subagent, action, level };
   });
 
   return app;

@@ -157,6 +157,7 @@ function initSchema(db: DatabaseSync): void {
   migrateAddDeepSearchRoute(db);
   migrateFixCronTaskRoute(db);
   migrateMessagesAddModel(db);
+  migratePermissions(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -690,6 +691,60 @@ function migrateLlmModelsAddDescription(db: DatabaseSync): void {
     db.exec("ALTER TABLE llm_models ADD COLUMN description TEXT");
   }
   db.prepare("INSERT INTO _migrations (name) VALUES ('llm_models_add_description')").run();
+}
+
+function migratePermissions(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'create_permissions'"
+  ).get();
+  if (existing) return;
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS permissions (
+      subagent   TEXT NOT NULL,
+      action     TEXT NOT NULL,
+      level      TEXT NOT NULL DEFAULT 'allowed'
+                 CHECK(level IN ('allowed', 'denied', 'confirm_required')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (subagent, action)
+    );
+  `);
+
+  // Seeds — actions dangereuses qui nécessitent confirmation explicite
+  db.prepare("INSERT OR IGNORE INTO permissions (subagent, action, level) VALUES ('code', 'git_push', 'confirm_required')").run();
+  db.prepare("INSERT OR IGNORE INTO permissions (subagent, action, level) VALUES ('code', 'restart_service', 'confirm_required')").run();
+
+  db.prepare("INSERT INTO _migrations (name) VALUES ('create_permissions')").run();
+}
+
+// ============================================================
+// Permissions (gate actions dangereuses)
+// ============================================================
+
+export type PermissionLevel = 'allowed' | 'denied' | 'confirm_required';
+
+/** Vérifie le niveau de permission d'une action. Retourne 'allowed' si absent de la table. */
+export function checkPermission(subagent: string, action: string): PermissionLevel {
+  const row = getDb().prepare(
+    'SELECT level FROM permissions WHERE subagent = ? AND action = ?'
+  ).get(subagent, action) as { level: string } | undefined;
+  return (row?.level ?? 'allowed') as PermissionLevel;
+}
+
+/** Définit ou met à jour le niveau de permission d'une action. */
+export function setPermission(subagent: string, action: string, level: PermissionLevel): void {
+  getDb().prepare(`
+    INSERT INTO permissions (subagent, action, level, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(subagent, action) DO UPDATE SET level = excluded.level, updated_at = excluded.updated_at
+  `).run(subagent, action, level);
+}
+
+/** Liste toutes les permissions définies. */
+export function getAllPermissions(): Array<{ subagent: string; action: string; level: PermissionLevel }> {
+  return getDb().prepare(
+    'SELECT subagent, action, level FROM permissions ORDER BY subagent, action'
+  ).all() as Array<{ subagent: string; action: string; level: PermissionLevel }>;
 }
 
 // ============================================================
@@ -1645,7 +1700,22 @@ Tu aides ton utilisateur (Adrien) avec ses tâches quotidiennes : emails, recher
 - Développeur TypeScript / Node.js
 - Intéressé par : IA, agents, self-hosting, domotique, productivité
 - Préfère les réponses actionables plutôt que les explications longues
-- Cost-conscious : toujours privilégier les solutions économiques`;
+- Cost-conscious : toujours privilégier les solutions économiques
+
+## Workflow auto-modification du code
+
+Quand on te demande de modifier/ajouter/corriger du code Makilab :
+1. Lis les fichiers concernés (code__read_file, code__search_code)
+2. Crée une branche agent/<nom-descriptif> (code__git_branch)
+3. Implémente les changements (code__write_file)
+4. Vérifie : code__run_check "typecheck" puis "test"
+5. Commit : code__git_commit avec message descriptif
+6. Rapport : résumé des changements + résultats tests
+7. Restart : propose de relancer les services impactés (confirmation requise)
+8. Push : seulement après confirmation explicite (le système te demandera automatiquement)
+
+Règles : toujours lire avant d'écrire, TypeScript strict, un commit par changement logique.
+Si un check échoue : lis l'erreur, corrige, relance (max 2 tentatives).`;
 
 /** Get the agent prompt (editable metaprompt) */
 export function getAgentPrompt(): string {
