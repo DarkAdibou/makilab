@@ -27,6 +27,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.ts';
 import { findTool } from './tools/index.ts';
 import { getAllSubAgents, findSubAgent, buildCapabilitiesPrompt } from './subagents/registry.ts';
+import { getRelevantSkills, buildSkillsIndexPrompt, buildSkillsBodyPrompt } from './skills/loader.ts';
 import {
   loadMemoryContext,
   buildMemoryPrompt,
@@ -178,8 +179,12 @@ export async function runAgentLoop(
   // Build system prompt as blocks for prompt caching:
   // - Stable block (base prompt + capabilities) → cache_control: ephemeral
   // - Dynamic block (cron + memory + retrieval) → no cache
-  const stableText = [getBaseSystemPrompt(), capabilitiesSection].filter(Boolean).join('\n\n');
-  const dynamicText = [cronSection, memorySection, retrievalSection].filter(Boolean).join('\n\n');
+  const skillsIndex = buildSkillsIndexPrompt();
+  const relevantSkills = getRelevantSkills(userMessage);
+  const skillsBody = buildSkillsBodyPrompt(relevantSkills);
+
+  const stableText = [getBaseSystemPrompt(), capabilitiesSection, skillsIndex].filter(Boolean).join('\n\n');
+  const dynamicText = [cronSection, memorySection, retrievalSection, skillsBody].filter(Boolean).join('\n\n');
   const systemBlocks = [
     ...(stableText ? [{ type: 'text' as const, text: stableText, cache_control: { type: 'ephemeral' as const } }] : []),
     ...(dynamicText ? [{ type: 'text' as const, text: dynamicText }] : []),

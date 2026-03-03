@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { getAllSubAgents } from './subagents/registry.ts';
 import { checkAllCapabilities } from './subagents/health.ts';
-import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt, getAllPermissions, setPermission, isSubagentDisabled, setSubagentDisabled } from './memory/sqlite.ts';
+import { getRecentMessages, listTasks, createTask, getTask, updateTask, deleteTask, getUniqueTags, getStats, listAgentEvents, listAllAgentTasks, listTaskExecutions, getTaskExecutionStats, getTaskMonthlyCost, getRecentLlmUsage, getAgentEventsNearUsage, getLlmUsageSummary, getLlmUsageHistory, getLlmModels, getLlmModelsCount, getLlmModelLastUpdate, getRouteConfig, setRouteForTaskType, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, getNotificationSettings, updateNotificationSettings, getCoreMemory, setFact, deleteFact, getMemorySettings, updateMemorySettings, getMemoryRetrievals, searchMessagesFullText, countAllMessages, getAgentPrompt, setAgentPrompt, getAllPermissions, setPermission, isSubagentDisabled, setSubagentDisabled, isSkillDisabled, setSkillDisabled } from './memory/sqlite.ts';
 import type { MemorySettings } from './memory/sqlite.ts';
 import { syncRecurringTasks, executeRecurringTask } from './tasks/cron.ts';
 import { CronExpressionParser } from 'cron-parser';
@@ -55,6 +55,55 @@ export async function buildServer() {
       const { enabled } = req.body;
       setSubagentDisabled(name, !enabled);
       return { name, enabled, disabled: isSubagentDisabled(name) };
+    },
+  );
+
+  // GET /api/skills — list all available skills with enabled state
+  app.get('/api/skills', async () => {
+    const { loadSkills, invalidateSkillsCache } = await import('./skills/loader.ts');
+    // Force reload to include disabled ones — we need to scan disk for all skills
+    invalidateSkillsCache();
+    const { readFileSync, readdirSync, existsSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const skillsDir = join(dirname(fileURLToPath(import.meta.url)), '../skills');
+    const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/s;
+    const YAML_RE = /^([\w-]+):\s+(.+)$/;
+    const result: Array<{ name: string; description: string; enabled: boolean }> = [];
+    if (existsSync(skillsDir)) {
+      for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const skillPath = join(skillsDir, entry.name, 'SKILL.md');
+        if (!existsSync(skillPath)) continue;
+        try {
+          const raw = readFileSync(skillPath, 'utf-8');
+          const match = FM_RE.exec(raw);
+          if (!match) continue;
+          const fm: Record<string, string> = {};
+          for (const line of match[1]!.split('\n')) {
+            const m = YAML_RE.exec(line.trim());
+            if (m) fm[m[1]!] = m[2]!.replace(/^["']|["']$/g, '').trim();
+          }
+          if (!fm['name'] || !fm['description']) continue;
+          result.push({ name: fm['name'], description: fm['description'], enabled: !isSkillDisabled(fm['name']) });
+        } catch { /* skip malformed */ }
+      }
+    }
+    // Restore cache with only enabled skills
+    loadSkills();
+    return result;
+  });
+
+  // PATCH /api/skills/:name/enabled — toggle a skill on/off
+  app.patch<{ Params: { name: string }; Body: { enabled: boolean } }>(
+    '/api/skills/:name/enabled',
+    async (req) => {
+      const { name } = req.params;
+      const { enabled } = req.body;
+      setSkillDisabled(name, !enabled);
+      const { invalidateSkillsCache } = await import('./skills/loader.ts');
+      invalidateSkillsCache();
+      return { name, enabled, disabled: isSkillDisabled(name) };
     },
   );
 

@@ -200,6 +200,27 @@ export async function toggleSubagent(name: string, enabled: boolean): Promise<vo
   if (!res.ok) throw new Error(`API error: ${res.status}`);
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
+export async function fetchSkills(): Promise<SkillInfo[]> {
+  const res = await fetch(`${API_BASE}/skills`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function toggleSkill(name: string, enabled: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/skills/${name}/enabled`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
 export async function ocrImage(base64: string, mimetype: string): Promise<{ text: string | null; chars: number }> {
   const res = await fetch(`${API_BASE}/ocr`, {
     method: 'POST',

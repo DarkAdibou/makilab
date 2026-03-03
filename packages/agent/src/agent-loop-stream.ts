@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.ts';
 import { findTool } from './tools/index.ts';
 import { getAllSubAgents, findSubAgent, buildCapabilitiesPrompt } from './subagents/registry.ts';
+import { getRelevantSkills, buildSkillsIndexPrompt, buildSkillsBodyPrompt } from './skills/loader.ts';
 import {
   loadMemoryContext,
   buildMemoryPrompt,
@@ -94,10 +95,14 @@ export async function* runAgentLoopStreaming(
     ? '## Mode tâche automatique\nTu exécutes une tâche planifiée. Agis directement sans commenter tes intentions. Pas de "Bien sûr", "Je vais", "Je m\'apprête à" — exécute et rapporte le résultat uniquement.'
     : '';
 
-  // Stable block (base prompt + capabilities) → cacheable
-  // Dynamic block (cron + memory + retrieval) → not cached
-  const stableText = [getBaseSystemPrompt(), capabilitiesSection].filter(Boolean).join('\n\n');
-  const dynamicText = [cronSection, memorySection, retrievalSection].filter(Boolean).join('\n\n');
+  const skillsIndex = buildSkillsIndexPrompt();
+  const relevantSkills = getRelevantSkills(userMessage);
+  const skillsBody = buildSkillsBodyPrompt(relevantSkills);
+
+  // Stable block (base prompt + capabilities + skills index) → cacheable
+  // Dynamic block (cron + memory + retrieval + skills body) → not cached
+  const stableText = [getBaseSystemPrompt(), capabilitiesSection, skillsIndex].filter(Boolean).join('\n\n');
+  const dynamicText = [cronSection, memorySection, retrievalSection, skillsBody].filter(Boolean).join('\n\n');
   const systemBlocks = [
     ...(stableText ? [{ type: 'text' as const, text: stableText, cache_control: { type: 'ephemeral' as const } }] : []),
     ...(dynamicText ? [{ type: 'text' as const, text: dynamicText }] : []),

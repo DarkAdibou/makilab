@@ -46,7 +46,7 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
       { href: '/chat', label: 'Chat', icon: MessageSquare },
       { href: '/todo', label: 'Todo', icon: CheckSquare },
       { href: '/tasks', label: 'Taches agent', icon: ListTodo },
-      { href: '/connections', label: 'Connections', icon: Plug },
+      { href: '/capabilities', label: 'Capabilities', icon: Plug },
       { href: '/costs', label: 'Costs', icon: DollarSign },
       { href: '/models', label: 'Models', icon: Cpu },
       { href: '/memory', label: 'Memoire', icon: Brain },
