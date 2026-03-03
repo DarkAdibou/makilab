@@ -89,6 +89,8 @@ export class WhatsAppSessionManager {
   private recentMessageIds = new Set<string>();
   // Track messages currently being processed to prevent concurrent handling
   private processingMessages = new Set<string>();
+  // Track IDs of messages sent BY the bot — used to skip our own replies (self-messaging setup)
+  private botSentIds = new Set<string>();
 
   constructor(
     private readonly allowedNumber: string,
@@ -115,7 +117,15 @@ export class WhatsAppSessionManager {
     if (!this.sock || this.state.status !== 'connected') {
       throw new Error('WhatsApp not connected');
     }
-    await this.sock.sendMessage(to, { text });
+    const msg = await this.sock.sendMessage(to, { text });
+    this.trackSent(msg?.key.id);
+  }
+
+  /** Track a bot-sent message ID to avoid re-processing it as incoming */
+  private trackSent(id: string | undefined): void {
+    if (!id) return;
+    this.botSentIds.add(id);
+    setTimeout(() => this.botSentIds.delete(id), 60_000);
   }
 
   private async connect(): Promise<void> {
@@ -199,8 +209,9 @@ export class WhatsAppSessionManager {
 
       for (const msg of messages) {
         if (!msg.message) continue;
-        // Skip all outgoing messages (fromMe=true) — bot's own replies would re-trigger the loop
-        if (msg.key.fromMe) continue;
+        // Skip bot's own replies — only those tracked in botSentIds (self-messaging setup)
+        // Do NOT skip all fromMe=true — in self-messaging, user messages also arrive with fromMe=true
+        if (msg.key.fromMe && this.botSentIds.has(msg.key.id ?? '')) continue;
 
         // Dedup: Baileys fires duplicate events with slightly different timestamps
         // Use 30s time window + text/audio content as dedup key
@@ -223,13 +234,15 @@ export class WhatsAppSessionManager {
         const from = msg.key.remoteJid ?? '';
 
         // SECURITY: strict whitelist — silently ignore unauthorized numbers
-        // Compare by stripping @domain suffix to handle LID vs JID format mismatch
-        // (Baileys may deliver as @s.whatsapp.net while .env has @lid or vice versa)
-        const fromNumber = from.split('@')[0];
-        const allowedNumber = this.allowedNumber.split('@')[0];
-        if (fromNumber !== allowedNumber) {
-          console.log(`🚫 Message ignoré — numéro non autorisé: ${from}`);
-          continue; // Use continue, not return — don't abort the whole batch
+        // fromMe=true means the message is from the account owner — skip whitelist check
+        // (LID format @lid won't match configured @s.whatsapp.net regardless)
+        if (!msg.key.fromMe) {
+          const fromNumber = from.split('@')[0];
+          const allowedNumber = this.allowedNumber.split('@')[0];
+          if (fromNumber !== allowedNumber) {
+            console.log(`🚫 Message ignoré — numéro non autorisé: ${from}`);
+            continue; // Use continue, not return — don't abort the whole batch
+          }
         }
 
         // Extract text — handle audio messages via Whisper transcription
@@ -252,14 +265,14 @@ export class WhatsAppSessionManager {
                 console.log(`🎙️ Transcription: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
               } else {
                 const errorTo = this.replyJid ?? from;
-                await this.sock!.sendMessage(errorTo, { text: '🎙️ Désolé, je n\'ai pas pu transcrire ce message vocal.' });
+                this.trackSent((await this.sock!.sendMessage(errorTo, { text: '🎙️ Désolé, je n\'ai pas pu transcrire ce message vocal.' }))?.key.id);
                 this.processingMessages.delete(dedupKey);
                 continue;
               }
             } catch (err) {
               console.error('❌ Erreur téléchargement audio:', err);
               const errorTo = this.replyJid ?? from;
-              await this.sock!.sendMessage(errorTo, { text: '🎙️ Erreur lors de la transcription du message vocal.' });
+              this.trackSent((await this.sock!.sendMessage(errorTo, { text: '🎙️ Erreur lors de la transcription du message vocal.' }))?.key.id);
               this.processingMessages.delete(dedupKey);
               continue;
             }
@@ -306,14 +319,14 @@ export class WhatsAppSessionManager {
           const outgoing = await this.onMessage(incoming);
           // Use replyJid override for self-messaging (LID → JID resolution)
           const sendTo = this.replyJid ?? outgoing.to;
-          await this.sock!.sendMessage(sendTo, { text: outgoing.text });
+          this.trackSent((await this.sock!.sendMessage(sendTo, { text: outgoing.text }))?.key.id);
           console.log(`📤 Réponse envoyée (${outgoing.text.length} chars)`);
         } catch (err) {
           console.error('❌ Erreur traitement message:', err);
           const errorTo = this.replyJid ?? from;
-          await this.sock!.sendMessage(errorTo, {
+          this.trackSent((await this.sock!.sendMessage(errorTo, {
             text: '❌ Une erreur est survenue. Réessaie dans un instant.',
-          });
+          }))?.key.id);
         } finally {
           this.processingMessages.delete(dedupKey);
         }
