@@ -39,6 +39,9 @@ export default function MemoryPage() {
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
+  // ── Tabs ──
+  const [activeTab, setActiveTab] = useState<'memory' | 'facts'>('memory');
+
   // ── Load data ──
   const loadFacts = () => {
     setFactsLoading(true);
@@ -113,6 +116,26 @@ export default function MemoryPage() {
       <div className="memory-header">
         <h1>Memoire</h1>
       </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+        {(['memory', 'facts'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '8px 20px', background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
+              fontWeight: activeTab === tab ? 600 : 400, fontSize: '0.9rem', marginBottom: -1,
+            }}
+          >
+            {tab === 'memory' ? 'Mémoire' : 'Faits connus'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'memory' && <>
 
       {/* ── Search — sticky top ── */}
       <div className="memory-search-sticky">
@@ -230,8 +253,9 @@ export default function MemoryPage() {
         </div>
       )}
 
-      {/* ── Facts ── */}
-      <div className="card command-section">
+      </>}
+
+      {activeTab === 'facts' && <div className="card command-section">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>Faits connus</h2>
           {!addingFact && (
@@ -328,7 +352,7 @@ export default function MemoryPage() {
             <button className="btn btn-ghost" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={() => { setAddingFact(false); setNewKey(''); setNewValue(''); }}>Annuler</button>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

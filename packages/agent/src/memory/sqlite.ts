@@ -1098,8 +1098,9 @@ export function updateTask(id: string, fields: {
   return getTask(id);
 }
 
-/** Delete a task by ID */
+/** Delete a task and all its steps by ID */
 export function deleteTask(id: string): boolean {
+  getDb().prepare('DELETE FROM task_steps WHERE task_id = ?').run(id);
   const result = getDb().prepare('DELETE FROM tasks WHERE id = ?').run(id);
   return result.changes > 0;
 }

@@ -5,37 +5,57 @@ import {
   type SubAgentInfo, type McpServerStatus, type CapabilityHealth,
 } from '../lib/api';
 
-// Map subagent names to their CapabilityHealth entry
-function getHealth(healthData: CapabilityHealth[], name: string): CapabilityHealth | undefined {
-  return healthData.find((h) => h.name === name);
+const ICONS: Record<string, string> = {
+  time: '🕐', web: '🌐', karakeep: '🔖', obsidian: '🗒️',
+  capture: '📥', tasks: '✅', homeassistant: '🏠', memory: '🧠',
+  code: '💻', settings: '⚙️', whatsapp: '📱',
+};
+
+const DISPLAY_NAMES: Record<string, string> = {
+  tasks: 'Agent Tasks',
+  homeassistant: 'Home Assistant',
+};
+
+function statusColor(h: CapabilityHealth, enabled: boolean): string {
+  if (!enabled) return 'var(--muted-foreground)';
+  if (!h.available) return h.reason?.includes('configuré') ? 'var(--muted-foreground)' : 'var(--destructive)';
+  return h.mode === 'file_fallback' ? '#f59e0b' : 'var(--success, #22c55e)';
 }
 
-function StatusDot({ health }: { health?: CapabilityHealth }) {
-  if (!health) return <span style={{ width: 10, height: 10, borderRadius: '50%', display: 'inline-block', background: 'var(--muted)', flexShrink: 0 }} />;
-  if (!health.available) {
-    const isOffline = health.reason && !health.reason.includes('configuré');
-    const color = isOffline ? 'var(--destructive)' : 'var(--muted)';
-    return <span style={{ width: 10, height: 10, borderRadius: '50%', display: 'inline-block', background: color, flexShrink: 0 }} title={health.reason} />;
-  }
-  const color = health.mode === 'file_fallback' ? '#f59e0b' : 'var(--success, #22c55e)';
-  return <span style={{ width: 10, height: 10, borderRadius: '50%', display: 'inline-block', background: color, flexShrink: 0 }} title={health.mode} />;
+function StatusBadge({ h, enabled }: { h: CapabilityHealth; enabled: boolean }) {
+  const color = statusColor(h, enabled);
+  const label = !enabled
+    ? 'Désactivé'
+    : !h.available
+    ? (h.reason?.includes('configuré') ? 'Non configuré' : 'Hors ligne')
+    : h.mode === 'file_fallback' ? 'Fallback' : 'Actif';
+
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: '0.7rem', fontWeight: 500, color,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      {label}
+    </span>
+  );
 }
 
-function ToggleSwitch({ enabled, onChange, disabled }: { enabled: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function ToggleSwitch({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       role="switch"
       aria-checked={enabled}
-      disabled={disabled}
-      onClick={() => onChange(!enabled)}
+      onClick={(e) => { e.stopPropagation(); onChange(!enabled); }}
       style={{
-        position: 'relative', width: 36, height: 20, borderRadius: 10, border: 'none', cursor: disabled ? 'default' : 'pointer',
+        position: 'relative', width: 32, height: 18, borderRadius: 9, border: 'none',
+        cursor: 'pointer', flexShrink: 0, padding: 0,
         background: enabled ? 'var(--primary, #6366f1)' : 'var(--muted-foreground, #888)',
-        transition: 'background 0.2s', flexShrink: 0, padding: 0,
+        transition: 'background 0.2s',
       }}
     >
       <span style={{
-        position: 'absolute', top: 3, left: enabled ? 18 : 3, width: 14, height: 14,
+        position: 'absolute', top: 2, left: enabled ? 16 : 2, width: 14, height: 14,
         borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
       }} />
     </button>
@@ -48,6 +68,7 @@ export default function ConnectionsPage() {
   const [healthData, setHealthData] = useState<CapabilityHealth[]>([]);
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,9 +84,7 @@ export default function ConnectionsPage() {
       setSubagents(sas);
       setMcpServers(mcps);
       setHealthData(health);
-      // Init toggles: enabled = not disabled = available in the subagents list
       const enabledNames = new Set(sas.map((s) => s.name));
-      // We need to fetch all possible subagents — use health names for full list
       const allNames = health.filter((h) => !h.name.startsWith('mcp:')).map((h) => h.name);
       const t: Record<string, boolean> = {};
       for (const name of allNames) t[name] = enabledNames.has(name);
@@ -84,57 +103,102 @@ export default function ConnectionsPage() {
     try {
       await toggleSubagent(name, enabled);
     } catch {
-      // Revert on error
       setToggles((prev) => ({ ...prev, [name]: !enabled }));
     }
   };
 
-  const toggleExpand = (name: string) => {
-    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
-  };
-
-  // Split subagents from health into groups
   const allCapabilities = healthData.filter((h) => !h.name.startsWith('mcp:'));
-  const configured = allCapabilities.filter((h) => h.available || (h.reason && !h.reason.includes('configuré')));
-  const notConfigured = allCapabilities.filter((h) => !h.available && h.reason && h.reason.includes('configuré'));
-
+  const connectedCount = allCapabilities.filter((h) => h.available).length;
+  const progressPct = allCapabilities.length > 0 ? (connectedCount / allCapabilities.length) * 100 : 0;
   const saActionMap = Object.fromEntries(subagents.map((s) => [s.name, s.actions]));
 
-  const renderSubagentRow = (h: CapabilityHealth) => {
+  const renderSubagentCard = (h: CapabilityHealth) => {
     const enabled = toggles[h.name] ?? true;
+    const notConfigured = !h.available && h.reason?.includes('configuré');
+    const isHovered = hoveredCard === h.name;
     const actions = saActionMap[h.name] ?? [];
     const isExpanded = expanded[h.name];
+    const displayName = DISPLAY_NAMES[h.name] ?? (h.name.charAt(0).toUpperCase() + h.name.slice(1));
+    const icon = ICONS[h.name] ?? '🔧';
 
     return (
       <div
         key={h.name}
+        onMouseEnter={() => setHoveredCard(h.name)}
+        onMouseLeave={() => setHoveredCard(null)}
         style={{
+          position: 'relative',
+          background: notConfigured ? 'transparent' : 'var(--card)',
+          border: notConfigured
+            ? '2px dashed var(--border)'
+            : `1px solid ${isHovered && enabled ? 'var(--primary)' : 'var(--border)'}`,
+          borderRadius: 'var(--radius-lg)',
+          padding: '14px 14px 10px',
           opacity: enabled ? 1 : 0.45,
-          padding: '10px 0',
-          borderBottom: '1px solid var(--border)',
+          transition: 'border-color 0.15s, opacity 0.2s',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => toggleExpand(h.name)}>
-          <StatusDot health={h} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 500, fontStyle: enabled ? 'normal' : 'italic' }}>{h.name}</span>
-            {h.mode && <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>{h.mode}</span>}
-            {!h.available && h.reason && <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>{h.reason}</span>}
-          </div>
-          {actions.length > 0 && (
-            <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)', marginRight: 4 }}>
-              {isExpanded ? '▲' : '▼'} {actions.length} action{actions.length > 1 ? 's' : ''}
-            </span>
-          )}
-          <ToggleSwitch
-            enabled={enabled}
-            onChange={(v) => { handleToggle(h.name, v); }}
-          />
+        {/* Hover X button — quick disable */}
+        {isHovered && enabled && !notConfigured && (
+          <button
+            onClick={() => handleToggle(h.name, false)}
+            title="Désactiver"
+            style={{
+              position: 'absolute', top: 6, right: 6,
+              width: 18, height: 18, borderRadius: '50%',
+              border: 'none', background: 'var(--muted)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.6rem', color: 'var(--muted-foreground)', padding: 0,
+            }}
+          >
+            ✕
+          </button>
+        )}
+
+        {/* Icon + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{icon}</span>
+          <span style={{ fontWeight: 600, fontSize: '0.8125rem', fontStyle: !enabled ? 'italic' : 'normal' }}>
+            {displayName}
+          </span>
         </div>
+
+        {/* Status badge */}
+        <StatusBadge h={h} enabled={enabled} />
+
+        {/* Mode / reason subtitle */}
+        {(h.mode || h.reason) && (
+          <div style={{
+            fontSize: '0.68rem', color: 'var(--muted-foreground)', marginTop: 2,
+            lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {h.available ? h.mode : h.reason}
+          </div>
+        )}
+
+        {/* Bottom row: actions expand + toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+          {actions.length > 0 ? (
+            <button
+              onClick={() => setExpanded((prev) => ({ ...prev, [h.name]: !prev[h.name] }))}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                fontSize: '0.68rem', color: 'var(--muted-foreground)',
+              }}
+            >
+              {isExpanded ? '▲' : '▼'} {actions.length} action{actions.length > 1 ? 's' : ''}
+            </button>
+          ) : <span />}
+          <ToggleSwitch enabled={enabled} onChange={(v) => handleToggle(h.name, v)} />
+        </div>
+
+        {/* Expanded action chips */}
         {isExpanded && actions.length > 0 && (
-          <div style={{ marginTop: 8, marginLeft: 20, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {actions.map((a) => (
-              <span key={a.name} className="badge badge-outline" title={a.description}>{a.name}</span>
+              <span key={a.name} className="badge badge-outline" style={{ fontSize: '0.65rem' }} title={a.description}>
+                {a.name}
+              </span>
             ))}
           </div>
         )}
@@ -146,67 +210,102 @@ export default function ConnectionsPage() {
     <div className="connections-container">
       <div className="connections-header">
         <h1>Connections</h1>
-        <button className="btn btn-ghost" style={{ padding: '6px 14px', fontSize: '0.8125rem' }} onClick={loadData} disabled={loading}>
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '6px 14px', fontSize: '0.8125rem' }}
+          onClick={loadData}
+          disabled={loading}
+        >
           {loading ? 'Chargement...' : 'Rafraîchir'}
         </button>
       </div>
 
       {error && <p className="text-destructive">{error}</p>}
 
-      <div className="card" style={{ padding: '0 16px', marginBottom: 24 }}>
-        <h2 style={{ margin: '12px 0 0', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.08em', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+      {/* Progress bar */}
+      {allCapabilities.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ height: 6, borderRadius: 3, background: 'var(--muted)', overflow: 'hidden', marginBottom: 6 }}>
+            <div style={{
+              height: '100%', width: `${progressPct}%`,
+              background: 'linear-gradient(90deg, var(--primary), #7c3aed)',
+              borderRadius: 3, transition: 'width 0.4s ease',
+            }} />
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+            {connectedCount} / {allCapabilities.length} connectés
+          </span>
+        </div>
+      )}
+
+      {/* Subagents grid */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{
+          fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.08em',
+          color: 'var(--muted-foreground)', textTransform: 'uppercase', marginBottom: 12,
+        }}>
           Subagents
         </h2>
-
-        {configured.length > 0 && (
-          configured.map(renderSubagentRow)
-        )}
-
-        {notConfigured.length > 0 && (
-          <>
-            <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', margin: '16px 0 4px', fontWeight: 600 }}>Non configurés</p>
-            {notConfigured.map(renderSubagentRow)}
-          </>
-        )}
-
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          {allCapabilities.map(renderSubagentCard)}
+        </div>
         {allCapabilities.length === 0 && !loading && (
-          <p className="text-muted" style={{ padding: '12px 0' }}>Aucun subagent disponible</p>
+          <p className="text-muted">Aucun subagent disponible</p>
         )}
       </div>
 
+      {/* MCP servers */}
       {mcpServers.length > 0 && (
-        <div className="card" style={{ padding: '0 16px' }}>
-          <h2 style={{ margin: '12px 0 0', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.08em', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+        <div>
+          <h2 style={{
+            fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.08em',
+            color: 'var(--muted-foreground)', textTransform: 'uppercase', marginBottom: 12,
+          }}>
             MCP Servers
           </h2>
-          {mcpServers.map((mcp) => (
-            <div
-              key={mcp.server}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-              onClick={() => toggleExpand(`mcp:${mcp.server}`)}
-            >
-              <span style={{
-                width: 10, height: 10, borderRadius: '50%', display: 'inline-block', flexShrink: 0,
-                background: mcp.connected ? 'var(--success, #22c55e)' : 'var(--destructive)',
-              }} />
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 500 }}>{mcp.server}</span>
-                <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
-                  {mcp.connected ? `${mcp.tools.length} outil${mcp.tools.length !== 1 ? 's' : ''}` : 'déconnecté'}
-                </span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+            {mcpServers.map((mcp) => (
+              <div key={mcp.server}>
+                <div
+                  style={{
+                    background: 'var(--card)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-lg)', padding: '14px 14px 10px', cursor: 'pointer',
+                  }}
+                  onClick={() => setExpanded((prev) => ({ ...prev, [`mcp:${mcp.server}`]: !prev[`mcp:${mcp.server}`] }))}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>🔌</span>
+                    <span style={{ fontWeight: 600, fontSize: '0.8125rem' }}>{mcp.server}</span>
+                  </div>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontSize: '0.7rem', fontWeight: 500,
+                    color: mcp.connected ? 'var(--success, #22c55e)' : 'var(--destructive)',
+                  }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      background: mcp.connected ? 'var(--success, #22c55e)' : 'var(--destructive)',
+                    }} />
+                    {mcp.connected ? `${mcp.tools.length} outil${mcp.tools.length !== 1 ? 's' : ''}` : 'Déconnecté'}
+                  </span>
+                  <div style={{ textAlign: 'right', marginTop: 8 }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                      {expanded[`mcp:${mcp.server}`] ? '▲' : '▼'}
+                    </span>
+                  </div>
+                </div>
+                {expanded[`mcp:${mcp.server}`] && mcp.tools.length > 0 && (
+                  <div style={{ padding: '8px 4px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {mcp.tools.map((t) => (
+                      <span key={t} className="badge badge-outline" style={{ fontSize: '0.65rem' }}>
+                        {t.replace(/^mcp_[^_]+__/, '')}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
-                {expanded[`mcp:${mcp.server}`] ? '▲' : '▼'}
-              </span>
-            </div>
-          ))}
-          {mcpServers.map((mcp) => expanded[`mcp:${mcp.server}`] && mcp.tools.length > 0 && (
-            <div key={`${mcp.server}-tools`} style={{ padding: '8px 0 12px 20px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {mcp.tools.map((t) => (
-                <span key={t} className="badge badge-outline">{t.replace(/^mcp_[^_]+__/, '')}</span>
-              ))}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>

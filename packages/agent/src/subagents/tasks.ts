@@ -17,6 +17,7 @@ import {
   createTask,
   updateTask,
   updateTaskStatus,
+  deleteTask,
   getTask,
   listTasks,
   getTaskSteps,
@@ -93,6 +94,17 @@ export const tasksSubAgent: SubAgent = {
         type: 'object',
         properties: {},
         required: [],
+      },
+    },
+    {
+      name: 'delete',
+      description: 'Supprime définitivement une tâche et toutes ses étapes (irréversible)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'UUID de la tâche à supprimer' },
+        },
+        required: ['id'],
       },
     },
   ],
@@ -192,6 +204,16 @@ export const tasksSubAgent: SubAgent = {
           return `- **${t.title}** — ${t.cron_expression} — ${status}\n  Prompt: ${t.cron_prompt ?? '(aucun)'}`;
         }).join('\n');
         return { success: true, text: `${tasks.length} tâche(s) récurrente(s):\n\n${formatted}`, data: tasks };
+      }
+
+      if (action === 'delete') {
+        const task = getTask(input['id'] as string);
+        if (!task) {
+          return { success: false, text: `Tâche introuvable : ${input['id'] as string}`, error: 'Not found' };
+        }
+        deleteTask(input['id'] as string);
+        logger.info({ taskId: input['id'] }, 'Task deleted');
+        return { success: true, text: `Tâche **${task.title}** supprimée.`, data: { id: input['id'] } };
       }
 
       return { success: false, text: `Action inconnue: ${action}`, error: `Unknown action: ${action}` };

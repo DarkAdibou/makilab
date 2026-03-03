@@ -2,8 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi, ocrImage } from '../lib/api';
-import type { ModelInfo } from '../lib/api';
+import {
+  fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi, ocrImage,
+  fetchSubagentHealth, toggleSubagent,
+} from '../lib/api';
+import type { ModelInfo, CapabilityHealth } from '../lib/api';
+
+const DISPLAY_NAMES: Record<string, string> = {
+  tasks: 'Agent Tasks',
+  homeassistant: 'Home Assistant',
+};
 
 interface Message {
   role: 'user' | 'assistant';
@@ -43,6 +51,85 @@ function ToolCallBlock({ call }: { call: ToolCall }) {
   );
 }
 
+function ToolsPanel({
+  health,
+  toggles,
+  onToggle,
+  onClose,
+}: {
+  health: CapabilityHealth[];
+  toggles: Record<string, boolean>;
+  onToggle: (name: string, enabled: boolean) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: 'absolute', top: '100%', right: 0, zIndex: 50,
+        background: 'var(--card)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)', padding: '8px 0',
+        minWidth: 260, boxShadow: 'var(--shadow-md)',
+        marginTop: 4,
+      }}
+    >
+      <div style={{
+        padding: '6px 14px 8px', fontSize: '0.7rem', fontWeight: 600,
+        letterSpacing: '0.06em', color: 'var(--muted-foreground)', textTransform: 'uppercase',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        Outils disponibles
+      </div>
+      {health.map((h) => {
+        const enabled = toggles[h.name] ?? true;
+        const color = !h.available
+          ? 'var(--muted-foreground)'
+          : h.mode === 'file_fallback' ? '#f59e0b' : 'var(--success, #22c55e)';
+        const displayName = DISPLAY_NAMES[h.name] ?? (h.name.charAt(0).toUpperCase() + h.name.slice(1));
+
+        return (
+          <div key={h.name} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '7px 14px', opacity: enabled ? 1 : 0.5,
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: '0.8125rem', fontWeight: 500 }}>{displayName}</span>
+            {h.mode && (
+              <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>{h.mode}</span>
+            )}
+            <button
+              role="switch"
+              aria-checked={enabled}
+              onClick={() => onToggle(h.name, !enabled)}
+              style={{
+                position: 'relative', width: 28, height: 16, borderRadius: 8, border: 'none',
+                cursor: 'pointer', flexShrink: 0, padding: 0,
+                background: enabled ? 'var(--primary, #6366f1)' : 'var(--muted-foreground, #888)',
+                transition: 'background 0.2s',
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: 2, left: enabled ? 14 : 2, width: 12, height: 12,
+                borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
+              }} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -52,6 +139,9 @@ export default function ChatPage() {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [agentStatus, setAgentStatus] = useState<'idle' | 'thinking' | 'working'>('idle');
   const [iterationCount, setIterationCount] = useState(0);
+  const [showTools, setShowTools] = useState(false);
+  const [toolsHealth, setToolsHealth] = useState<CapabilityHealth[]>([]);
+  const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +152,13 @@ export default function ChatPage() {
     fetchRoutes().then(routes => {
       const conv = routes.find(r => r.task_type === 'conversation');
       if (conv) setSelectedModel(conv.model_id);
+    }).catch(() => {});
+    fetchSubagentHealth().then(health => {
+      const subagentHealth = health.filter(h => !h.name.startsWith('mcp:'));
+      setToolsHealth(subagentHealth);
+      const t: Record<string, boolean> = {};
+      for (const h of subagentHealth) t[h.name] = true;
+      setToolToggles(t);
     }).catch(() => {});
   }, []);
 
@@ -163,7 +260,7 @@ export default function ChatPage() {
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(',')[1];
+      const base64 = dataUrl.split(',')[1] ?? '';
       try {
         const { text } = await ocrImage(base64, file.type || 'image/jpeg');
         if (text) {
@@ -176,38 +273,67 @@ export default function ChatPage() {
       }
     };
     reader.readAsDataURL(file);
-    // Reset so same file can be re-selected
     e.target.value = '';
   };
 
+  const handleToolToggle = async (name: string, enabled: boolean) => {
+    setToolToggles(prev => ({ ...prev, [name]: enabled }));
+    try {
+      await toggleSubagent(name, enabled);
+    } catch {
+      setToolToggles(prev => ({ ...prev, [name]: !enabled }));
+    }
+  };
+
+  const activeToolCount = toolsHealth.filter(h => toolToggles[h.name] !== false && h.available).length;
+
   return (
     <div className="chat-container">
-      <div className="chat-header">
+      <div className="chat-header" style={{ position: 'relative' }}>
         <h1>Chat</h1>
-        {models.length > 0 && (
-          <div className="model-selector" style={{ marginLeft: 'auto' }}>
-            <select value={selectedModel} onChange={e => {
-              const modelId = e.target.value;
-              setSelectedModel(modelId);
-              if (modelId) updateRouteApi('conversation', modelId).catch(() => {});
-            }}>
-              {models.some(m => m.recommended) && (
-                <optgroup label="Recommandés">
-                  {models.filter(m => m.recommended).map(m => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          {toolsHealth.length > 0 && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: '0.8125rem', padding: '4px 10px' }}
+              onClick={() => setShowTools(v => !v)}
+            >
+              🔧 {activeToolCount} outil{activeToolCount !== 1 ? 's' : ''}
+            </button>
+          )}
+          {models.length > 0 && (
+            <div className="model-selector">
+              <select value={selectedModel} onChange={e => {
+                const modelId = e.target.value;
+                setSelectedModel(modelId);
+                if (modelId) updateRouteApi('conversation', modelId).catch(() => {});
+              }}>
+                {models.some(m => m.recommended) && (
+                  <optgroup label="Recommandés">
+                    {models.filter(m => m.recommended).map(m => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Tous les modèles">
+                  {models.filter(m => !m.recommended).map(m => (
                     <option key={m.id} value={m.id}>{m.label}</option>
                   ))}
                 </optgroup>
-              )}
-              <optgroup label="Tous les modèles">
-                {models.filter(m => !m.recommended).map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </optgroup>
-              {selectedModel && !models.find(m => m.id === selectedModel) && (
-                <option value={selectedModel}>{selectedModel}</option>
-              )}
-            </select>
-          </div>
+                {selectedModel && !models.find(m => m.id === selectedModel) && (
+                  <option value={selectedModel}>{selectedModel}</option>
+                )}
+              </select>
+            </div>
+          )}
+        </div>
+        {showTools && (
+          <ToolsPanel
+            health={toolsHealth}
+            toggles={toolToggles}
+            onToggle={handleToolToggle}
+            onClose={() => setShowTools(false)}
+          />
         )}
       </div>
       <div className="chat-messages">

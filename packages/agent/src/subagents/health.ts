@@ -88,9 +88,8 @@ function checkCapture(): CapabilityHealth {
 
 /** Run health checks for all capabilities and MCP servers */
 export async function checkAllCapabilities(): Promise<CapabilityHealth[]> {
-  const [obsidian, qdrant, whatsapp, homeassistant, memory] = await Promise.all([
+  const [obsidian, whatsapp, homeassistant, memory] = await Promise.all([
     checkObsidian(),
-    checkQdrant(),
     checkWhatsApp(),
     checkHomeAssistant(),
     checkMemory(),
@@ -114,5 +113,5 @@ export async function checkAllCapabilities(): Promise<CapabilityHealth[]> {
     reason: s.connected ? undefined : 'Déconnecté',
   }));
 
-  return [obsidian, qdrant, whatsapp, homeassistant, memory, ...sync, ...mcpHealth];
+  return [obsidian, whatsapp, homeassistant, memory, ...sync, ...mcpHealth];
 }
