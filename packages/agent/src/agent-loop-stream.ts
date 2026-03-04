@@ -121,7 +121,20 @@ export async function* runAgentLoopStreaming(
           : h.content,
       };
     }),
-    { role: 'user', content: userMessage },
+    {
+      role: 'user',
+      content: context.attachments?.length
+        ? [
+            ...context.attachments
+              .filter((a) => a.type === 'image')
+              .map((a) => ({
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: a.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: a.base64 },
+              })),
+            { type: 'text' as const, text: userMessage },
+          ]
+        : userMessage,
+    },
   ];
 
   const anthropicTools = buildToolList();
