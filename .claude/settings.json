@@ -70,7 +70,13 @@
       "Bash(git merge:*)",
       "Bash(git branch:*)",
       "Bash(cmd /c \"netstat -ano | findstr :8000\")",
-      "Bash(uvx workspace-mcp:*)"
+      "Bash(uvx workspace-mcp:*)",
+      "Bash(pnpm --filter agent typecheck:*)",
+      "Read(//c/Users/adrie/AppData/Local/uv/cache/archive-v0/**)",
+      "Read(//c/Users/adrie/AppData/Local/uv/**)",
+      "Bash(pnpm --filter agent exec tsc:*)",
+      "Bash(pnpm --filter dashboard exec tsc:*)",
+      "Bash(pnpm --filter agent test:*)"
     ],
     "additionalDirectories": [
       "d:\\SynologyDrive\\IA et agents\\makilab\\docs",

@@ -21,7 +21,7 @@ import {
   getAgentPrompt,
   checkPermission,
 } from './memory/sqlite.ts';
-import { wasJustConfirmed } from './agent-loop.ts';
+import { wasJustConfirmed, compactHistory } from './agent-loop.ts';
 import { extractAndSaveFacts } from './memory/fact-extractor.ts';
 import { autoRetrieve, buildRetrievalPrompt } from './memory/retriever.ts';
 import { indexConversation } from './memory/semantic-indexer.ts';
@@ -323,6 +323,7 @@ export async function* runAgentLoopStreaming(
 
   extractAndSaveFacts(userMessage, fullText, channel, toolResultTexts).catch(() => {});
   indexConversation(channel, userMessage, fullText).catch(() => {});
+  compactHistory(channel).catch(() => {});
 
   yield { type: 'cost', costUsd: totalCostUsd, model: resolvedModel };
   yield { type: 'done', fullText };

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi,
+  fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes,
   fetchSubagentHealth, toggleSubagent,
 } from '../lib/api';
 import type { ModelInfo, CapabilityHealth } from '../lib/api';
@@ -303,9 +303,7 @@ export default function ChatPage() {
           {models.length > 0 && (
             <div className="model-selector">
               <select value={selectedModel} onChange={e => {
-                const modelId = e.target.value;
-                setSelectedModel(modelId);
-                if (modelId) updateRouteApi('conversation', modelId).catch(() => {});
+                setSelectedModel(e.target.value);
               }}>
                 {models.some(m => m.recommended) && (
                   <optgroup label="Recommandés">

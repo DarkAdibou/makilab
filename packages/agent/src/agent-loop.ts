@@ -110,7 +110,7 @@ function buildToolList(): Anthropic.Tool[] {
 }
 
 /** Auto-compact conversation history when too long (fire-and-forget) */
-async function compactHistory(channel: string): Promise<void> {
+export async function compactHistory(channel: string): Promise<void> {
   try {
     const total = countMessages(channel);
     if (total <= COMPACTION_THRESHOLD) return;
@@ -224,6 +224,7 @@ export async function runAgentLoop(
   let iterations = 0;
   let finalReply = '';
   let totalCostUsd = 0;
+  let resolvedModel = '';
 
   // ── Agentic loop ──────────────────────────────────────────────────────────
   while (iterations < config.agentMaxIterations) {
@@ -238,6 +239,7 @@ export async function runAgentLoop(
       channel,
     });
     totalCostUsd += response.usage.costUsd;
+    if (!resolvedModel) resolvedModel = response.usage.model;
 
     if (response.stopReason === 'end_turn') {
       const textBlock = response.content.find((b) => b.type === 'text');
@@ -323,7 +325,7 @@ export async function runAgentLoop(
 
   // ── Persist + background tasks ────────────────────────────────────────────
   saveMessage(channel, 'user', userMessage, undefined, context.attachments);
-  saveMessage(channel, 'assistant', finalReply);
+  saveMessage(channel, 'assistant', finalReply, resolvedModel || undefined);
 
   // Collect tool result texts from the conversation
   const toolResultTexts = messages

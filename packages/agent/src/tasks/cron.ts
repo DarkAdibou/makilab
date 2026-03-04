@@ -83,7 +83,7 @@ export function startCron(): void {
       const summary = await runWorkflow(taskId, steps);
 
       const briefingPrompt = `C'est l'heure du briefing matin. Voici ce que j'ai collecté automatiquement :\n\n${summary}\n\nFais un briefing concis et proactif.`;
-      await runAgentLoop(briefingPrompt, { channel: config.cronChannel, from: 'cron', history: [] });
+      await runAgentLoop(briefingPrompt, { channel: config.cronChannel, from: 'cron', history: [], taskType: 'cron_moderate' });
 
       logger.info({ taskId }, 'CRON: morning briefing complete');
     } catch (err) {
@@ -110,7 +110,7 @@ export function startCron(): void {
       const summary = await runWorkflow(taskId, steps);
 
       const eveningPrompt = `C'est l'heure du résumé de fin de journée. Voici les données :\n\n${summary}\n\nFais un résumé bref et encourage pour demain.`;
-      await runAgentLoop(eveningPrompt, { channel: config.cronChannel, from: 'cron', history: [] });
+      await runAgentLoop(eveningPrompt, { channel: config.cronChannel, from: 'cron', history: [], taskType: 'cron_moderate' });
 
       logger.info({ taskId }, 'CRON: evening summary complete');
     } catch (err) {

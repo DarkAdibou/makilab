@@ -1,7 +1,7 @@
 import { config } from '../config.ts';
 import { getRouteForTaskType, getMemorySettings } from '../memory/sqlite.ts';
 
-export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_simple' | 'cron_moderate' | 'cron_task' | 'orchestration' | 'deep_search';
+export type TaskType = 'conversation' | 'compaction' | 'fact_extraction' | 'classification' | 'cron_simple' | 'cron_moderate' | 'cron_task' | 'orchestration' | 'deep_search' | 'skill_creation';
 
 interface ModelRoute {
   provider: 'anthropic' | 'openrouter';
@@ -19,11 +19,12 @@ const FALLBACK_ROUTES: Record<TaskType, ModelRoute> = {
   cron_task:        { provider: 'anthropic',   model: 'claude-sonnet-4-6' },
   orchestration:    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001' },
   deep_search:      { provider: 'openrouter',  model: 'perplexity/sonar-pro' },
+  skill_creation:   { provider: 'anthropic',   model: 'claude-sonnet-4-6' },
 };
 
 /** Cached prefer_openrouter setting (avoid DB reads on every LLM call) */
 let _preferOpenRouterCache: { value: boolean; ts: number } | null = null;
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 5_000;
 
 function getPreferOpenRouter(): boolean {
   const now = Date.now();
