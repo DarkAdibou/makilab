@@ -48,7 +48,60 @@ Lire avec `mcp_google-workspace__read_sheet_values` (spreadsheet_id, range: `She
 
 ### Matching catégories
 
-Lire la colonne Catégorie existante dans Détails Produits avec `mcp_google-workspace__read_sheet_values` pour connaître les catégories déjà utilisées. Assigner chaque produit à la catégorie la plus proche, ou créer une nouvelle si aucune ne convient.
+Référentiel de catégories à utiliser (ordre de priorité : matcher le plus précis possible) :
+
+**Viandes & Protéines animales**
+- `Volaille` (poulet, dinde, canard)
+- `Bœuf` (steak, bœuf haché, rosbif)
+- `Porc` (jambon, lardons, côtelettes)
+- `Poisson` (saumon, thon, cabillaud, sardines)
+- `Fruits de mer` (crevettes, moules, calamars)
+- `Charcuterie` (saucisson, rillettes, pâté)
+- `Œufs`
+
+**Produits laitiers**
+- `Lait` (lait UHT, lait frais)
+- `Fromage` (toutes variétés)
+- `Yaourt & Desserts lactés`
+- `Beurre & Crème`
+
+**Féculents & Glucides**
+- `Riz`
+- `Pâtes`
+- `Pain & Viennoiseries`
+- `Céréales petit-déjeuner`
+- `Légumineuses` (lentilles, pois chiches, haricots)
+- `Pommes de terre`
+
+**Fruits & Légumes**
+- `Légumes frais`
+- `Fruits frais`
+- `Légumes surgelés`
+- `Fruits surgelés`
+- `Conserves légumes/fruits`
+
+**Épicerie & Condiments**
+- `Huiles & Graisses`
+- `Sauces & Condiments` (ketchup, moutarde, sauce soja)
+- `Épices & Herbes`
+- `Sucre & Confiserie`
+- `Chocolat & Biscuits`
+
+**Boissons**
+- `Eau`
+- `Jus de fruits`
+- `Sodas`
+- `Café & Thé`
+- `Alcool`
+
+**Autres**
+- `Produits bio` (si la catégorie précise n'est pas claire)
+- `Surgelés divers`
+- `Hygiène & Beauté`
+- `Entretien & Nettoyage`
+- `Divers`
+
+Règle : si une catégorie existante dans le Sheet est plus précise que le référentiel ci-dessus, la conserver. Ne jamais créer de catégories plus larges que celles du référentiel.
 
 ### Écrire les données
 
