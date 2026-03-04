@@ -86,6 +86,8 @@ export async function buildServer() {
         } catch { /* skip malformed */ }
       }
     }
+    const { invalidateSkillsCache } = await import('./skills/loader.ts');
+    invalidateSkillsCache();
     return result;
   });
 
