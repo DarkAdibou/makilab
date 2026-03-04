@@ -113,6 +113,39 @@ export default function LlmSettingsPage() {
             </div>
           </div>
 
+          {/* Skill creation model */}
+          <div className="card notif-settings-card">
+            <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 600 }}>Création de skills</h3>
+            <p className="text-muted" style={{ margin: '0 0 16px', fontSize: '0.8125rem' }}>
+              Modèle utilisé par le skill creator pour rédiger et améliorer les SKILL.md. Sonnet recommandé pour la qualité de rédaction.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <select
+                value={getRouteModel('skill_creation')}
+                onChange={e => handleRouteChange('skill_creation', e.target.value)}
+                disabled={savingRoute === 'skill_creation' || catalog.length === 0}
+                style={{ flex: '0 0 260px', padding: '5px 8px', fontSize: '0.8125rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6 }}
+              >
+                <option value="">— non configuré —</option>
+                {catalog.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.provider_slug})</option>
+                ))}
+              </select>
+              {(() => {
+                const m = getModelInfo(getRouteModel('skill_creation'));
+                return m ? (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatPrice(m.price_input_per_m)} · {formatPrice(m.price_output_per_m)}
+                    </span>
+                    {m.description && <span> · {m.description.length > 80 ? m.description.slice(0, 80) + '…' : m.description}</span>}
+                  </span>
+                ) : null;
+              })()}
+              {savingRoute === 'skill_creation' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sauvegarde…</span>}
+            </div>
+          </div>
+
           {/* Cron task levels */}
           <div className="card notif-settings-card">
             <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 600 }}>Tâches agentiques</h3>

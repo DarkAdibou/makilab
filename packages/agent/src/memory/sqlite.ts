@@ -160,6 +160,7 @@ function initSchema(db: DatabaseSync): void {
   migrateMessagesAddModel(db);
   migrateMessagesAddAttachments(db);
   migratePermissions(db);
+  migrateAddSkillCreationRoute(db);
 }
 
 /** Migration: add 'backlog' to tasks.status CHECK constraint for existing DBs */
@@ -746,6 +747,16 @@ function migratePermissions(db: DatabaseSync): void {
   db.prepare("INSERT OR IGNORE INTO permissions (subagent, action, level) VALUES ('code', 'restart_service', 'confirm_required')").run();
 
   db.prepare("INSERT INTO _migrations (name) VALUES ('create_permissions')").run();
+}
+
+function migrateAddSkillCreationRoute(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'add_skill_creation_route'"
+  ).get();
+  if (existing) return;
+
+  db.prepare("INSERT OR IGNORE INTO llm_route_config (task_type, model_id) VALUES ('skill_creation', 'claude-sonnet-4-6')").run();
+  db.prepare("INSERT INTO _migrations (name) VALUES ('add_skill_creation_route')").run();
 }
 
 // ============================================================
