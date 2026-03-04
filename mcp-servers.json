@@ -27,7 +27,8 @@
       "--permissions",
       "gmail:readonly",
       "calendar:full",
-      "drive:readonly"
+      "drive:full",
+      "sheets:full"
     ],
     "env": {
       "GOOGLE_OAUTH_CLIENT_ID": "${GOOGLE_OAUTH_CLIENT_ID}",

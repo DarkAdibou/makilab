@@ -1,57 +1,74 @@
 ---
 name: facture-scanner
-description: Analyse une facture (image, PDF ou texte), catégorise les produits intelligemment et archive les données sur Google Drive et Sheets. Utilise quand l'utilisateur dit "Archive ce reçu", "Scan cette facture Carrefour" ou envoie une preuve d'achat.
+description: Analyse une facture ou un ticket de caisse (image envoyée dans le chat), catégorise les produits et archive les données sur Google Drive et Google Sheets. Utilise ce skill quand l'utilisateur envoie une photo de ticket/facture et dit "archive ce reçu", "scan cette facture", "utilise le skill facture", ou envoie une preuve d'achat.
 ---
 
-# Facture Scanner (v4 - Ultra-Traçabilité)
+# Facture Scanner
 
-Ce skill transforme une facture brute en données structurées, classées et archivées avec une traçabilité totale entre Drive et Sheets.
+Transforme une facture (image dans le contexte visuel) en données structurées archivées sur Drive et Sheets.
 
-## 1. Déclenchement & Intent
-Le skill s'active dès que l'utilisateur soumet un document d'achat (image, PDF ou texte brut) avec des phrases comme :
-- "Archive ce reçu"
-- "Scan cette facture Carrefour"
-- "Analyse mes dépenses de hier"
+## Étape 1 — Extraction depuis l'image
 
-## 2. Le Cerveau (Matching & Catégorisation)
-Avant d'indexer les données, l'agent doit assurer la cohérence des catégories :
-1. **Synchronisation du Référentiel** : Lire l'onglet "Catégories" ou la colonne "Catégorie" existante dans le Google Sheet "Suivi Dépenses Makilab" via `mcp_google-workspace__get_spreadsheet_values`.
-2. **Classification Intelligente** : Pour chaque produit extrait (ex: "Choco Pops"), choisir la catégorie la plus proche du référentiel existant. Si aucune correspondance n'est trouvée, suggérer une nouvelle catégorie cohérente (ex: "Petit-Déjeuner").
+Depuis l'image reçue, extraire :
+- **Enseigne** (ex: Carrefour, Lidl, Amazon)
+- **Date d'achat** (format YYYY-MM-DD)
+- **Montant total TTC**
+- **Liste des produits** : libellé, prix unitaire, quantité
 
-## 3. Structure du Google Sheet
-Le spreadsheet "Suivi Dépenses Makilab" doit comporter deux onglets :
+## Étape 2 — Archivage Drive
 
-### Onglet : Historique Factures
-| ID Facture | Date Achat | Lieu d'achat (Enseigne) | Montant Total TTC | Lien Drive (Source) | Tags |
-|------------|------------|-------------------------|-------------------|---------------------|------|
+1. Chercher si le dossier `Factures` existe avec `mcp_google-workspace__search_drive_files` (query: `name = 'Factures' and mimeType = 'application/vnd.google-apps.folder'`)
+2. Si absent, créer la hiérarchie avec `mcp_google-workspace__create_drive_folder` (créer `Factures`, puis `YYYY`, puis `MM` en utilisant le parentId retourné à chaque étape)
+3. Uploader l'image avec `mcp_google-workspace__create_drive_file` :
+   - `name` : `YYYY-MM-DD - [Enseigne] - [Total]€.jpg`
+   - `parent_folder_id` : l'ID du dossier MM
+   - `content` : contenu base64 de l'image
+4. Obtenir le lien avec `mcp_google-workspace__get_drive_shareable_link`
 
-### Onglet : Détails Produits
-| ID Facture (Lien) | Produit | Prix Unitaire | Quantité | Montant Ligne | Catégorie (Matchée) | Date |
-|-------------------|---------|---------------|----------|---------------|---------------------|------|
+## Étape 3 — Google Sheets
 
-## 4. Workflow Technique
+### Trouver ou créer le spreadsheet
 
-### Étape 1 : Extraction
-Extraire les métadonnées globales : Date, Enseigne, Montant Total TTC.
+Chercher avec `mcp_google-workspace__search_drive_files` (query: `name = 'Suivi Dépenses Makilab' and mimeType = 'application/vnd.google-apps.spreadsheet'`).
 
-### Étape 2 : Archivage Drive
-1. Créer le dossier : `Factures/[Année]/[Mois]/` (si inexistant).
-2. Nommer le fichier : `YYYY-MM-DD - [Enseigne] - [Total]€.extension`.
-3. Récupérer le **Lien de partage** (Shareable Link) via `mcp_google-workspace__get_drive_shareable_link`.
+Si absent : créer avec `mcp_google-workspace__create_spreadsheet` (title: "Suivi Dépenses Makilab"). Mémoriser le spreadsheet ID.
 
-### Étape 3 : Parsing & Matching Categories
-1. Extraire chaque ligne de produit (Libellé, PU, Quantité).
-2. Lire le référentiel des catégories existantes dans le Sheet.
-3. Assigner une catégorie à chaque produit.
+### Initialiser les onglets si nécessaire
 
-### Étape 4 : Indexation Sheets
-Écrire les données dans les deux onglets respectifs de "Suivi Dépenses Makilab".
+Lire avec `mcp_google-workspace__read_sheet_values` (spreadsheet_id, range: `Sheet1!A1:G1`). Si vide, écrire les headers via `mcp_google-workspace__modify_sheet_values` :
 
-### Étape 5 : Notification WhatsApp
-Envoyer une confirmation via `whatsapp__send` :
-"Analyse terminée ! 🧾 [Enseigne] ([Total]€). Facture archivée ici : [Lien Drive]"
+- Onglet par défaut renommé **Historique Factures** : `ID Facture | Date Achat | Enseigne | Montant Total TTC | Lien Drive | Tags`
+- Créer un 2e onglet **Détails Produits** avec `mcp_google-workspace__create_sheet`, puis écrire headers : `ID Facture | Produit | Prix Unitaire | Quantité | Montant Ligne | Catégorie | Date`
 
-## 5. Outils Utilisés
-- `mcp_google-workspace` : Drive (création dossier, upload, lien shareable), Sheets (lecture catégories, écriture lignes).
-- `whatsapp` : Notification finale.
-- `capture__classify` : Pour la détection initiale du type "invoice".
+### Matching catégories
+
+Lire la colonne Catégorie existante dans Détails Produits avec `mcp_google-workspace__read_sheet_values` pour connaître les catégories déjà utilisées. Assigner chaque produit à la catégorie la plus proche, ou créer une nouvelle si aucune ne convient.
+
+### Écrire les données
+
+Utiliser `mcp_google-workspace__modify_sheet_values` (valueInputOption: `USER_ENTERED`) pour ajouter :
+
+1. Une ligne dans **Historique Factures** (range: `Historique Factures!A:F`)
+2. Une ligne par produit dans **Détails Produits** (range: `Détails Produits!A:G`)
+
+L'ID Facture est `YYYY-MM-DD-[Enseigne]` (ex: `2026-03-04-Carrefour`).
+
+## Étape 4 — Notification
+
+Envoyer via `whatsapp__send` :
+```
+Analyse terminée ! 🧾 [Enseigne] ([Total]€). Facture archivée : [Lien Drive]
+```
+
+## Format de réponse final
+
+Résumer dans le chat :
+1. **Archivage Drive** : nom du fichier + lien cliquable
+2. **Catégories matchées** : liste produit → catégorie
+3. **Sheets** : nombre de lignes ajoutées + lien spreadsheet
+
+## Notes importantes
+
+- `modify_sheet_values` sert à écrire ET ajouter (pas d'outil `append` séparé) — utiliser une plage ouverte comme `Historique Factures!A:F` pour ajouter après les données existantes
+- `create_drive_file` prend un `parent_folder_id` (ID, pas chemin) — toujours créer les dossiers d'abord et récupérer leur ID
+- Les outils Drive write nécessitent `drive:full` dans les permissions MCP (déjà configuré)
