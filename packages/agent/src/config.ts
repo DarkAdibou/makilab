@@ -72,6 +72,7 @@ export const config = {
   // Google Workspace MCP (OAuth2)
   googleOAuthClientId: optional('GOOGLE_OAUTH_CLIENT_ID', ''),
   googleOAuthClientSecret: optional('GOOGLE_OAUTH_CLIENT_SECRET', ''),
+  googleWorkspaceEmail: optional('GOOGLE_WORKSPACE_EMAIL', ''),
 } as const;
 
 /**

@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../logger.ts';
 import { loadMcpServersConfig, type McpServerConfig } from './config.ts';
+import { config } from '../config.ts';
 
 const MCP_TOOL_PREFIX = 'mcp_';
 const MCP_SEP = '__';
@@ -166,6 +167,14 @@ export function parseMcpToolName(fullName: string): { server: string; tool: stri
   };
 }
 
+/** Inject server-specific required params that the agent shouldn't need to know */
+function injectServerDefaults(server: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (server === 'google-workspace' && config.googleWorkspaceEmail && !args['user_google_email']) {
+    return { ...args, user_google_email: config.googleWorkspaceEmail };
+  }
+  return args;
+}
+
 export async function callMcpTool(
   fullName: string,
   args: Record<string, unknown>,
@@ -180,9 +189,11 @@ export async function callMcpTool(
     return { success: false, text: `MCP server "${parsed.server}" not connected` };
   }
 
+  const enrichedArgs = injectServerDefaults(parsed.server, args);
+
   try {
     const result = await conn.client.callTool(
-      { name: parsed.tool, arguments: args },
+      { name: parsed.tool, arguments: enrichedArgs },
       undefined,
       { maxTotalTimeout: 60_000 },
     );

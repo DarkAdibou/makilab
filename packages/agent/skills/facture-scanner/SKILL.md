@@ -69,6 +69,7 @@ Résumer dans le chat :
 
 ## Notes importantes
 
+- **Chaque appel MCP google-workspace requiert `user_google_email: "d4rkxbow@gmail.com"`** — sans ce paramètre, tous les appels échouent avec "Missing required argument"
 - `modify_sheet_values` sert à écrire ET ajouter (pas d'outil `append` séparé) — utiliser une plage ouverte comme `Historique Factures!A:F` pour ajouter après les données existantes
 - `create_drive_file` prend un `parent_folder_id` (ID, pas chemin) — toujours créer les dossiers d'abord et récupérer leur ID
 - Les outils Drive write nécessitent `drive:full` dans les permissions MCP (déjà configuré)
