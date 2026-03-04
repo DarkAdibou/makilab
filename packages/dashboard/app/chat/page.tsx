@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi, ocrImage,
+  fetchMessages, sendMessageStreamWithModel, fetchModels, fetchRoutes, updateRouteApi,
   fetchSubagentHealth, toggleSubagent,
 } from '../lib/api';
 import type { ModelInfo, CapabilityHealth } from '../lib/api';
@@ -270,16 +270,6 @@ export default function ChatPage() {
       const base64 = dataUrl.split(',')[1] ?? '';
       const mimeType = file.type || 'image/jpeg';
       setPendingImages(prev => [...prev, { base64, mimeType }]);
-      try {
-        const { text, description } = await ocrImage(base64, mimeType);
-        if (text) {
-          setInput((prev) => prev ? `${prev}\n\n[Image: ${description}]\n${text}` : `[Image: ${description}]\n${text}`);
-        } else {
-          setInput((prev) => prev ? `${prev}\n[Image: ${description}]` : `[Image: ${description}]`);
-        }
-      } catch {
-        setInput((prev) => prev ? `${prev}\n[Erreur OCR: ${file.name}]` : `[Erreur OCR: ${file.name}]`);
-      }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
