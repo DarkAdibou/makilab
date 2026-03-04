@@ -94,14 +94,27 @@ Référentiel de catégories à utiliser (ordre de priorité : matcher le plus p
 - `Café & Thé`
 - `Alcool`
 
-**Autres**
-- `Produits bio` (si la catégorie précise n'est pas claire)
-- `Surgelés divers`
+**Maison & Hygiène**
 - `Hygiène & Beauté`
 - `Entretien & Nettoyage`
+- `Pharmacie & Santé`
+
+**Services & Abonnements**
+- `Télécom & Internet` (forfait mobile, box internet)
+- `Streaming & Logiciels` (Netflix, Spotify, Adobe...)
+- `Transport` (train, avion, bus, location véhicule)
+- `Hébergement` (hôtel, Airbnb, camping)
+- `Restauration` (restaurant, livraison repas)
+- `Énergie` (électricité, gaz, eau)
+- `Assurance`
+- `Formation & Culture` (cours, musée, cinéma, livres)
+- `Services divers`
+
+**Divers**
+- `Surgelés divers`
 - `Divers`
 
-Règle : si une catégorie existante dans le Sheet est plus précise que le référentiel ci-dessus, la conserver. Ne jamais créer de catégories plus larges que celles du référentiel.
+Règle : ces catégories sont un référentiel de départ, pas une liste exhaustive. Si aucune ne correspond précisément, créer une nouvelle catégorie descriptive (ex: `Matériel jardinage`, `Fournitures bureau`). Ne jamais forcer une catégorie approximative — la précision prime. Conserver les catégories existantes dans le Sheet si elles sont plus précises.
 
 ### Écrire les données
 
