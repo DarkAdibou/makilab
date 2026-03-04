@@ -19,6 +19,7 @@ interface Message {
   channel?: string;
   costUsd?: number;
   model?: string;
+  attachments?: Array<{ type: string; base64: string; mimeType: string }>;
 }
 
 interface ToolCall {
@@ -142,12 +143,16 @@ export default function ChatPage() {
   const [showTools, setShowTools] = useState(false);
   const [toolsHealth, setToolsHealth] = useState<CapabilityHealth[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
+  const [pendingImages, setPendingImages] = useState<Array<{ base64: string; mimeType: string }>>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchMessages('all', 50).then(setMessages).catch(() => {});
+    fetchMessages('all', 50).then(msgs => setMessages(msgs.map(m => ({
+      ...m,
+      attachments: m.attachments,
+    })))).catch(() => {});
     fetchModels().then(setModels).catch(() => {});
     fetchRoutes().then(routes => {
       const conv = routes.find(r => r.task_type === 'conversation');
@@ -176,19 +181,21 @@ export default function ChatPage() {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    const imagesToSend = [...pendingImages];
     setInput('');
+    setPendingImages([]);
     setLoading(true);
     setToolCalls([]);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, attachments: imagesToSend.map(img => ({ type: 'image', base64: img.base64, mimeType: img.mimeType })) }]);
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
     setAgentStatus('thinking');
     setIterationCount(0);
 
     try {
       let fullContent = '';
-      for await (const event of sendMessageStreamWithModel(text, 'mission_control', selectedModel || undefined)) {
+      for await (const event of sendMessageStreamWithModel(text, 'mission_control', selectedModel || undefined, imagesToSend.length ? imagesToSend : undefined)) {
         if (event.type === 'thinking') {
           setAgentStatus('thinking');
         } else if (event.type === 'iteration') {
@@ -261,12 +268,14 @@ export default function ChatPage() {
     reader.onload = async () => {
       const dataUrl = reader.result as string;
       const base64 = dataUrl.split(',')[1] ?? '';
+      const mimeType = file.type || 'image/jpeg';
+      setPendingImages(prev => [...prev, { base64, mimeType }]);
       try {
-        const { text } = await ocrImage(base64, file.type || 'image/jpeg');
+        const { text, description } = await ocrImage(base64, mimeType);
         if (text) {
-          setInput((prev) => prev ? `${prev}\n\n[Image: ${file.name}]\n${text}` : `[Image: ${file.name}]\n${text}`);
+          setInput((prev) => prev ? `${prev}\n\n[Image: ${description}]\n${text}` : `[Image: ${description}]\n${text}`);
         } else {
-          setInput((prev) => prev ? `${prev}\n[Image: ${file.name} — aucun texte détecté]` : `[Image: ${file.name} — aucun texte détecté]`);
+          setInput((prev) => prev ? `${prev}\n[Image: ${description}]` : `[Image: ${description}]`);
         }
       } catch {
         setInput((prev) => prev ? `${prev}\n[Erreur OCR: ${file.name}]` : `[Erreur OCR: ${file.name}]`);
@@ -361,7 +370,17 @@ export default function ChatPage() {
                 )}
               </>
             ) : (
-              m.content
+              <>
+                {m.attachments?.filter(a => a.type === 'image').map((att, i) => (
+                  <img
+                    key={i}
+                    src={`data:${att.mimeType};base64,${att.base64}`}
+                    alt="Image jointe"
+                    style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, marginBottom: 4, display: 'block' }}
+                  />
+                ))}
+                {m.content}
+              </>
             )}
           </div>
         ))}
@@ -380,6 +399,28 @@ export default function ChatPage() {
           {agentStatus === 'thinking' && 'Analyse…'}
           {agentStatus === 'working' && iterationCount > 1 && `Itération ${iterationCount}…`}
           {agentStatus === 'working' && iterationCount <= 1 && 'Traitement…'}
+        </div>
+      )}
+      {pendingImages.length > 0 && (
+        <div style={{ padding: '4px 12px', display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--border)' }}>
+          {pendingImages.map((img, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <img
+                src={`data:${img.mimeType};base64,${img.base64}`}
+                alt="Image en attente"
+                style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }}
+              />
+              <button
+                onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
+                style={{
+                  position: 'absolute', top: -4, right: -4, width: 16, height: 16,
+                  borderRadius: '50%', border: 'none', background: 'var(--destructive)',
+                  color: '#fff', cursor: 'pointer', fontSize: '0.6rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                }}
+              >✕</button>
+            </div>
+          ))}
         </div>
       )}
       <div className="chat-input-area">

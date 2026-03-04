@@ -23,7 +23,8 @@ export interface OutgoingMessage {
 
 export interface Attachment {
   type: 'audio' | 'image' | 'document';
-  url: string;
+  url?: string;
+  base64?: string;
   mimeType: string;
 }
 
@@ -34,6 +35,7 @@ export interface AgentContext {
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   model?: string;
   taskType?: string;
+  attachments?: Array<{ type: string; base64: string; mimeType: string }>;
 }
 
 // Tools

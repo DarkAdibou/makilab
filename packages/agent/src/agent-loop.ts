@@ -309,7 +309,7 @@ export async function runAgentLoop(
   }
 
   // ── Persist + background tasks ────────────────────────────────────────────
-  saveMessage(channel, 'user', userMessage);
+  saveMessage(channel, 'user', userMessage, undefined, context.attachments);
   saveMessage(channel, 'assistant', finalReply);
 
   // Collect tool result texts from the conversation

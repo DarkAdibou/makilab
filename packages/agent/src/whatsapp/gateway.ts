@@ -28,10 +28,15 @@ export async function initWhatsApp(): Promise<void> {
         content: m.content,
       }));
 
+      const attachments = msg.attachments
+        ?.filter((a) => a.base64)
+        .map((a) => ({ type: a.type as string, base64: a.base64!, mimeType: a.mimeType }));
+
       const result = await runAgentLoop(msg.text, {
         channel: 'whatsapp' as Channel,
         from: msg.from,
         history,
+        attachments: attachments?.length ? attachments : undefined,
       });
 
       // agent-loop.ts already saves messages to SQLite

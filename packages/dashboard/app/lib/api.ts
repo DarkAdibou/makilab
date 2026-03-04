@@ -3,7 +3,7 @@ const API_BASE = '/api';
 export async function fetchMessages(channel = 'mission_control', limit = 50) {
   const res = await fetch(`${API_BASE}/messages?channel=${channel}&limit=${limit}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json() as Promise<Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string }>>;
+  return res.json() as Promise<Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string; attachments?: Array<{ type: string; base64: string; mimeType: string }> }>>;
 }
 
 export async function sendMessage(message: string, channel = 'mission_control') {
@@ -221,7 +221,7 @@ export async function toggleSkill(name: string, enabled: boolean): Promise<void>
   if (!res.ok) throw new Error(`API error: ${res.status}`);
 }
 
-export async function ocrImage(base64: string, mimetype: string): Promise<{ text: string | null; chars: number }> {
+export async function ocrImage(base64: string, mimetype: string): Promise<{ text: string | null; description: string; chars: number }> {
   const res = await fetch(`${API_BASE}/ocr`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -350,11 +350,12 @@ export async function* sendMessageStreamWithModel(
   message: string,
   channel = 'mission_control',
   model?: string,
+  images?: Array<{ base64: string; mimeType: string }>,
 ): AsyncGenerator<{ type: string; content?: string; name?: string; fullText?: string; message?: string; success?: boolean }> {
   const res = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, channel, model }),
+    body: JSON.stringify({ message, channel, model, images }),
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   if (!res.body) throw new Error('No response body');

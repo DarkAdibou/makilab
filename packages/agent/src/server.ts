@@ -180,29 +180,31 @@ export async function buildServer() {
     },
   );
 
-  // POST /api/ocr — extract text from an image (base64)
+  // POST /api/ocr — extract text and description from an image (base64)
   app.post<{ Body: { image: string; mimetype?: string } }>(
     '/api/ocr',
     async (req, reply) => {
       const { image, mimetype = 'image/jpeg' } = req.body;
       if (!image) return reply.status(400).send({ error: 'image required (base64)' });
       const buffer = Buffer.from(image, 'base64');
-      const text = await extractTextFromImage(buffer, mimetype);
-      return { text, chars: text?.length ?? 0 };
+      const result = await extractTextFromImage(buffer, mimetype);
+      return { text: result.text, description: result.description, chars: result.text?.length ?? 0 };
     },
   );
 
   // POST /api/chat
-  app.post<{ Body: { message: string; channel?: string; model?: string } }>(
+  app.post<{ Body: { message: string; channel?: string; model?: string; images?: Array<{ base64: string; mimeType: string }> } }>(
     '/api/chat',
     async (req) => {
-      const { message, channel = 'mission_control', model } = req.body;
+      const { message, channel = 'mission_control', model, images } = req.body;
       const history = getRecentMessages('all', 30);
+      const attachments = images?.map((img) => ({ type: 'image', base64: img.base64, mimeType: img.mimeType }));
       const result = await runAgentLoop(message, {
         channel: channel as 'mission_control',
         from: 'mission_control',
         history,
         model,
+        attachments,
       });
       // Mirror response to WhatsApp if connected (fire-and-forget)
       const { connected } = getWhatsAppStatus();
@@ -279,10 +281,10 @@ export async function buildServer() {
   );
 
   // POST /api/chat/stream — SSE streaming chat
-  app.post<{ Body: { message: string; channel?: string; model?: string } }>(
+  app.post<{ Body: { message: string; channel?: string; model?: string; images?: Array<{ base64: string; mimeType: string }> } }>(
     '/api/chat/stream',
     async (req, reply) => {
-      const { message, channel = 'mission_control', model } = req.body;
+      const { message, channel = 'mission_control', model, images } = req.body;
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -292,11 +294,13 @@ export async function buildServer() {
 
       try {
         const history = getRecentMessages('all', 30);
+        const attachments = images?.map((img) => ({ type: 'image', base64: img.base64, mimeType: img.mimeType }));
         const stream = runAgentLoopStreaming(message, {
           channel: channel as 'mission_control',
           from: 'mission_control',
           history,
           model,
+          attachments,
         });
 
         for await (const event of stream) {

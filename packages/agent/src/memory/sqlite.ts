@@ -158,6 +158,7 @@ function initSchema(db: DatabaseSync): void {
   migrateFixCronTaskRoute(db);
   migrateAddCronComplexityRoutes(db);
   migrateMessagesAddModel(db);
+  migrateMessagesAddAttachments(db);
   migratePermissions(db);
 }
 
@@ -707,6 +708,22 @@ function migrateLlmModelsAddDescription(db: DatabaseSync): void {
   db.prepare("INSERT INTO _migrations (name) VALUES ('llm_models_add_description')").run();
 }
 
+function migrateMessagesAddAttachments(db: DatabaseSync): void {
+  const existing = db.prepare(
+    "SELECT name FROM _migrations WHERE name = 'messages_add_attachments'"
+  ).get();
+  if (existing) return;
+
+  const schema = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'"
+  ).get() as { sql: string } | undefined);
+
+  if (schema && !schema.sql.includes('attachments')) {
+    db.exec("ALTER TABLE messages ADD COLUMN attachments TEXT");
+  }
+  db.prepare("INSERT INTO _migrations (name) VALUES ('messages_add_attachments')").run();
+}
+
 function migratePermissions(db: DatabaseSync): void {
   const existing = db.prepare(
     "SELECT name FROM _migrations WHERE name = 'create_permissions'"
@@ -797,42 +814,54 @@ export function saveMessage(
   role: 'user' | 'assistant',
   content: string,
   model?: string,
+  attachments?: Array<{ type: string; base64: string; mimeType: string }>,
 ): void {
   getDb().prepare(`
-    INSERT INTO messages (channel, role, content, model) VALUES (?, ?, ?, ?)
-  `).run(channel, role, content, model ?? null);
+    INSERT INTO messages (channel, role, content, model, attachments) VALUES (?, ?, ?, ?, ?)
+  `).run(channel, role, content, model ?? null, attachments ? JSON.stringify(attachments) : null);
 }
 
 /** Load last N messages for a channel (for context window) */
 export function getRecentMessages(
   channel: string,
   limit = 20,
-): Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string }> {
+): Array<{ role: 'user' | 'assistant'; content: string; channel?: string; model?: string; attachments?: Array<{ type: string; base64: string; mimeType: string }> }> {
   const db = getDb();
 
   if (channel === 'all') {
     const rows = db.prepare(`
-      SELECT role, content, channel, model FROM messages
+      SELECT role, content, channel, model, attachments FROM messages
       WHERE channel NOT LIKE 'fts-test%'
       ORDER BY id DESC
       LIMIT ?
-    `).all(limit) as Array<{ role: string; content: string; channel: string; model: string | null }>;
+    `).all(limit) as Array<{ role: string; content: string; channel: string; model: string | null; attachments: string | null }>;
     return rows
       .reverse()
-      .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, channel: r.channel, model: r.model ?? undefined }));
+      .map((r) => ({
+        role: r.role as 'user' | 'assistant',
+        content: r.content,
+        channel: r.channel,
+        model: r.model ?? undefined,
+        attachments: r.attachments ? (JSON.parse(r.attachments) as Array<{ type: string; base64: string; mimeType: string }>) : undefined,
+      }));
   }
 
   const rows = db.prepare(`
-    SELECT role, content, model FROM messages
+    SELECT role, content, model, attachments FROM messages
     WHERE channel = ?
     ORDER BY id DESC
     LIMIT ?
-  `).all(channel, limit) as Array<{ role: string; content: string; model: string | null }>;
+  `).all(channel, limit) as Array<{ role: string; content: string; model: string | null; attachments: string | null }>;
 
   // Reverse to get chronological order
   return rows
     .reverse()
-    .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content, model: r.model ?? undefined }));
+    .map((r) => ({
+      role: r.role as 'user' | 'assistant',
+      content: r.content,
+      model: r.model ?? undefined,
+      attachments: r.attachments ? (JSON.parse(r.attachments) as Array<{ type: string; base64: string; mimeType: string }>) : undefined,
+    }));
 }
 
 /** Count messages for a channel */

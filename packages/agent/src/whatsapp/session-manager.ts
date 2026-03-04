@@ -250,6 +250,7 @@ export class WhatsAppSessionManager {
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
           '';
+        let imageAttachment: { type: 'image'; base64: string; mimeType: string } | undefined;
 
         if (!text.trim()) {
           // Check for audio/voice message
@@ -284,14 +285,16 @@ export class WhatsAppSessionManager {
               try {
                 const buffer = await downloadMediaMessage(msg as WAMessage, 'buffer', {});
                 const mimetype = imageMsg.mimetype || 'image/jpeg';
-                const extracted = await extractTextFromImage(buffer as Buffer, mimetype);
-                if (extracted) {
-                  const caption = imageMsg.caption ? `${imageMsg.caption}\n\n` : '';
-                  text = `[Image reçue — texte extrait]\n${caption}${extracted}`;
-                  console.log(`🖼️ OCR: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
+                const imageBase64 = (buffer as Buffer).toString('base64');
+                const ocrResult = await extractTextFromImage(buffer as Buffer, mimetype);
+                const caption = imageMsg.caption ? `${imageMsg.caption}\n\n` : '';
+                if (ocrResult.text) {
+                  text = `[Image — ${ocrResult.description}]\n${caption}${ocrResult.text}`;
                 } else {
-                  text = imageMsg.caption || '[Image reçue — aucun texte détecté]';
+                  text = `[Image — ${ocrResult.description}]${caption ? `\n${caption.trim()}` : ''}`.trim();
                 }
+                console.log(`🖼️ OCR: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}"`);
+                imageAttachment = { type: 'image' as const, base64: imageBase64, mimeType: mimetype };
               } catch (err) {
                 console.error('❌ Erreur OCR image:', err);
                 text = imageMsg.caption || '[Image reçue — erreur OCR]';
@@ -313,6 +316,7 @@ export class WhatsAppSessionManager {
           from,
           text: text.trim(),
           timestamp,
+          attachments: imageAttachment ? [imageAttachment] : undefined,
         };
 
         try {
