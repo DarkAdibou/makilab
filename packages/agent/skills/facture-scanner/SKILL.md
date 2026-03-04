@@ -19,11 +19,17 @@ Depuis l'image reçue, extraire :
 
 1. Chercher si le dossier `Factures` existe avec `mcp_google-workspace__search_drive_files` (query: `name = 'Factures' and mimeType = 'application/vnd.google-apps.folder'`)
 2. Si absent, créer la hiérarchie avec `mcp_google-workspace__create_drive_folder` (créer `Factures`, puis `YYYY`, puis `MM` en utilisant le parentId retourné à chaque étape)
-3. Uploader l'image avec `mcp_google-workspace__create_drive_file` :
-   - `name` : `YYYY-MM-DD - [Enseigne] - [Total]€.jpg`
+3. Sauver l'image en fichier temporaire avec `capture__save_temp` :
+   - `base64` : le contenu base64 de l'image reçue
+   - `mimeType` : le type MIME de l'image (ex: `image/jpeg`)
+   - `filename` : `YYYY-MM-DD - [Enseigne] - [Total]€.jpg`
+   - Récupérer le `fileUrl` retourné (format `file:///...`)
+4. Uploader l'image originale sur Drive avec `mcp_google-workspace__create_drive_file` :
+   - `file_name` : `YYYY-MM-DD - [Enseigne] - [Total]€.jpg`
    - `parent_folder_id` : l'ID du dossier MM
-   - `content` : contenu base64 de l'image
-4. Obtenir le lien avec `mcp_google-workspace__get_drive_shareable_link`
+   - `fileUrl` : le chemin `file://` retourné par `capture__save_temp`
+   - `mime_type` : `image/jpeg` (ou le type MIME détecté)
+5. Obtenir le lien avec `mcp_google-workspace__get_drive_shareable_link`
 
 ## Étape 3 — Google Sheets
 
@@ -38,7 +44,7 @@ Si absent : créer avec `mcp_google-workspace__create_spreadsheet` (title: "Suiv
 Lire avec `mcp_google-workspace__read_sheet_values` (spreadsheet_id, range: `Sheet1!A1:G1`). Si vide, écrire les headers via `mcp_google-workspace__modify_sheet_values` :
 
 - Onglet par défaut renommé **Historique Factures** : `ID Facture | Date Achat | Enseigne | Montant Total TTC | Lien Drive | Tags`
-- Créer un 2e onglet **Détails Produits** avec `mcp_google-workspace__create_sheet`, puis écrire headers : `ID Facture | Produit | Prix Unitaire | Quantité | Montant Ligne | Catégorie | Date`
+- Créer un 2e onglet **Détails Produits** avec `mcp_google-workspace__create_sheet`, puis écrire headers : `ID Facture | Produit | Prix Unitaire | Quantité | Montant Ligne | Catégorie | Date | Lien Facture`
 
 ### Matching catégories
 
@@ -49,7 +55,7 @@ Lire la colonne Catégorie existante dans Détails Produits avec `mcp_google-wor
 Utiliser `mcp_google-workspace__modify_sheet_values` (valueInputOption: `USER_ENTERED`) pour ajouter :
 
 1. Une ligne dans **Historique Factures** (range: `Historique Factures!A:F`)
-2. Une ligne par produit dans **Détails Produits** (range: `Détails Produits!A:G`)
+2. Une ligne par produit dans **Détails Produits** (range: `Détails Produits!A:H`) — inclure le lien Drive dans la colonne `Lien Facture` pour chaque ligne produit
 
 L'ID Facture est `YYYY-MM-DD-[Enseigne]` (ex: `2026-03-04-Carrefour`).
 

@@ -13,6 +13,10 @@
  *   - < 0.5  : Stocké dans Captures/Inbox/ sans classification
  */
 
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import type { CaptureClassification, CaptureType } from '@makilab/shared';
 import { createLlmClient } from '../llm/client.ts';
@@ -40,6 +44,19 @@ export const captureSubAgent: SubAgent = {
       },
     },
     {
+      name: 'save_temp',
+      description: 'Sauve une image base64 dans un fichier temporaire local et retourne le chemin file:// pour un upload Drive. Utilise avant mcp_google-workspace__create_drive_file pour uploader une image.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          base64: { type: 'string', description: 'Contenu de l\'image encodé en base64' },
+          mimeType: { type: 'string', description: 'MIME type (image/jpeg, image/png...)' },
+          filename: { type: 'string', description: 'Nom de fichier souhaité (ex: facture-2026-03-04.jpg)' },
+        },
+        required: ['base64', 'mimeType', 'filename'],
+      },
+    },
+    {
       name: 'route',
       description: 'Route le contenu vers les destinations (obsidian, karakeep) selon la classification',
       inputSchema: {
@@ -60,6 +77,13 @@ export const captureSubAgent: SubAgent = {
     try {
       if (action === 'classify') {
         return await classifyContent(input['content'] as string);
+      }
+      if (action === 'save_temp') {
+        return saveTempImage(
+          input['base64'] as string,
+          input['mimeType'] as string,
+          input['filename'] as string,
+        );
       }
       if (action === 'route') {
         const destinations = JSON.parse(input['destinations'] as string) as string[];
@@ -84,6 +108,30 @@ export const captureSubAgent: SubAgent = {
     }
   },
 };
+
+// ── Temp image save ───────────────────────────────────────────────────────────────────────────────
+
+const TEMP_DIR = join(tmpdir(), 'makilab-uploads');
+
+function saveTempImage(base64: string, mimeType: string, filename: string): SubAgentResult {
+  try {
+    mkdirSync(TEMP_DIR, { recursive: true });
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const filePath = join(TEMP_DIR, `${randomUUID()}-${safeName}`);
+    writeFileSync(filePath, Buffer.from(base64, 'base64'));
+    return {
+      success: true,
+      text: `file://${filePath.replace(/\\/g, '/')}`,
+      data: { filePath, fileUrl: `file://${filePath.replace(/\\/g, '/')}` },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      text: 'Erreur lors de la sauvegarde temporaire',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 // ── Classification ────────────────────────────────────────────────────────────────────────────────
 
