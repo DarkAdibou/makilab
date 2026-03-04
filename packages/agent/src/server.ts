@@ -15,7 +15,7 @@ import { getWhatsAppStatus, sendWhatsAppMessage } from './whatsapp/gateway.ts';
 import { extractTextFromImage } from './ocr.ts';
 
 export async function buildServer() {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024 }); // 20MB pour les images base64
 
   await app.register(cors, { origin: true });
 
