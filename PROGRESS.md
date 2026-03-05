@@ -18,7 +18,7 @@
 | E5 | Smart Capture | 🔴 Critique | ✅ Terminé |
 | E6 | Gestionnaire de tâches + CRON | 🟠 Important | ✅ Terminé |
 | E7 | Mission Control — Chat + Connections MVP | 🟠 Important | ✅ Terminé |
-| E8 | Canal Gmail entrant + Raycast webhook | 🟠 Important | 🔲 Non démarré (après E13) |
+| E8 | ~~Canal Gmail entrant + Raycast webhook~~ | 🟠 Important | ❌ Caduque (Gmail via MCP Workspace) |
 | E9 | Mémoire sémantique (Qdrant + embeddings) | 🟡 Moyen terme | ✅ Terminé |
 | E10 | Mission Control v2 — Kanban, Streaming, Home Assistant | 🟠 Important | ✅ Terminé |
 | E11 | Code SubAgent (auto-modification + Git manager) | 🟡 Moyen terme | ✅ Terminé |
@@ -331,45 +331,67 @@ Plan : `docs/plans/2026-03-02-e16-implementation.md`
 | F7 | Costs page — camembert SVG + ModelBreakdown drill-down par task type | ✅ |
 | F8 | Badges modèle persistants — migration messages_add_model + saveMessage(model?) | ✅ |
 
+## Session 9-10 fixes
+
+| Fix | Description | Statut |
+|---|---|---|
+| F9 | bodyLimit Fastify 20MB — images base64 dépassaient la limite 1MB | ✅ |
+| F10 | Images injectées dans contexte Anthropic — content array [image, text] | ✅ |
+| F11 | OCR retiré du champ input chat — redondant avec injection image | ✅ |
+| F12 | drive:full + sheets:full — permissions MCP workspace jamais commitées | ✅ |
+| F13 | user_google_email auto-injecté — injectServerDefaults dans bridge.ts | ✅ |
+| F14 | capture__save_temp — image base64 → fichier temp → fileUrl file:// | ✅ |
+| F15 | Skill facture-scanner — vrais outils MCP, upload image, catégories fines | ✅ |
+| F16 | skill-creator — confirmation obligatoire, jamais de branches git | ✅ |
+| F17 | GET /api/skills — invalidateSkillsCache pour F5 refresh | ✅ |
+
 ---
 
 ## Dernière session
 
-**Date :** 2026-03-03 (session 8)
+**Date :** 2026-03-05 (session 10)
 **Accompli :**
-- MCP HTTP transport : McpServerConfig étendu (transport/url/headers), StreamableHTTPClientTransport dans bridge
-- resolveEnvVars() : résolution ${VAR} dans headers/env, skip gracieux si manquant
-- Google Maps Grounding Lite : entrée HTTP dans mcp-servers.json, GOOGLE_MAPS_API_KEY
-- Google Workspace MCP : entrée uvx stdio, GOOGLE_OAUTH_CLIENT_ID + SECRET
-- 3 nouveaux tests mcp-bridge (HTTP parse, skip sans url, défaut stdio) → 11/11 ✅
-- docs/mcp-servers-schema.json : schéma JSON pour VSCode IntelliSense
+- Images dans contexte Anthropic : agent-loop + agent-loop-stream injectent les images base64 comme content array [image_block, text_block]
+- Fastify bodyLimit 20MB (était 1MB → crash silencieux pour images base64)
+- OCR retiré du champ input chat (redondant maintenant que l'agent voit l'image)
+- Google Workspace MCP : drive:readonly → drive:full + sheets:full dans mcp-servers.json
+- Auto-injection user_google_email dans bridge.ts (injectServerDefaults) via GOOGLE_WORKSPACE_EMAIL env var
+- capture__save_temp : sauve image base64 en fichier temporaire, retourne fileUrl file:// pour upload Drive
+- Skill facture-scanner refondu : vrais noms outils workspace-mcp v1.14.2, upload image originale (pas Google Doc), colonne Lien Facture dans Détails Produits, taxonomie catégories fine + services + création libre
+- Skills system : skill-creator SKILL.md corrigé (confirmation avant écriture, jamais de branches git)
+- GET /api/skills invalide le cache (F5 recharge les skills)
+- compactHistory exporté + appelé dans agent-loop-stream
+- router.ts : skill_creation task type + TTL cache 5s
+- cron.ts : taskType cron_moderate pour briefings
+- orchestrator.ts supprimé
 
-**Fichiers modifiés (session 8) :**
-- `packages/agent/src/mcp/config.ts` : McpServerConfig étendu, parsing HTTP/stdio
-- `packages/agent/src/mcp/bridge.ts` : StreamableHTTPClientTransport, resolveEnvVars()
-- `packages/agent/src/tests/mcp-bridge.test.ts` : 3 nouveaux tests HTTP
-- `packages/agent/src/config.ts` : googleMapsApiKey, googleOAuthClientId, googleOAuthClientSecret
-- `.env.example` : sections Google Maps + Workspace
-- `mcp-servers.json` : google-maps (HTTP) + google-workspace (uvx)
-- `docs/mcp-servers-schema.json` : nouveau — schéma JSON config MCP
+**Fichiers modifiés (session 10) :**
+- `packages/agent/src/agent-loop.ts` : images dans contexte, export compactHistory, resolvedModel
+- `packages/agent/src/agent-loop-stream.ts` : images dans contexte, compactHistory
+- `packages/agent/src/server.ts` : bodyLimit 20MB, invalidateSkillsCache dans GET /api/skills
+- `packages/agent/src/mcp/bridge.ts` : injectServerDefaults (user_google_email)
+- `packages/agent/src/config.ts` : googleWorkspaceEmail
+- `packages/agent/src/subagents/capture.ts` : action save_temp
+- `packages/agent/src/llm/router.ts` : skill_creation, TTL 5s
+- `packages/agent/src/memory/sqlite.ts` : section Skills dans prompt agent
+- `packages/agent/src/tasks/cron.ts` : taskType cron_moderate
+- `packages/agent/skills/facture-scanner/SKILL.md` : refonte complète
+- `packages/agent/skills/skill-creator/SKILL.md` : confirmation obligatoire
+- `packages/dashboard/app/chat/page.tsx` : retrait OCR input + import cleanup
+- `mcp-servers.json` : drive:full + sheets:full
+- `.gitignore` : *.db-shm + *.db-wal
 
 **État du code :**
-- GitHub : https://github.com/DarkAdibou/makilab.git (branch: feature/mcp-http-google)
+- GitHub : https://github.com/DarkAdibou/makilab.git (branch: master)
 - `pnpm dev:api` : API Fastify port 3100 (40+ endpoints)
 - `pnpm dev:dashboard` : Next.js 15 port 3000 (14 pages)
-- `pnpm --filter @makilab/agent test` : 121 tests (120 passent, 1 échec pré-existant memory-retrieval duplicate column)
 - 11 subagents : time, web, karakeep, obsidian, gmail, capture, tasks, homeassistant, memory, code, whatsapp (conditionnel)
-
-**À faire manuellement (clés Google) :**
-1. Google Cloud Console → créer API Key → activer Maps Grounding Lite → ajouter GOOGLE_MAPS_API_KEY dans .env
-2. Google Cloud Console → OAuth2 Desktop → activer Gmail+Drive+Calendar APIs → ajouter GOOGLE_OAUTH_CLIENT_ID + SECRET dans .env
-3. `uvx workspace-mcp --tool-tier core` → auth OAuth2 interactif une seule fois
+- 2 skills : facture-scanner, skill-creator
 
 **Prochaines étapes :**
-- Merge feature/mcp-http-google → master après test manuel avec clés
-- Task 11 (optionnel) : déprécier subagent gmail si MCP Workspace Gmail satisfaisant
-- E8 — Canal Gmail entrant + Raycast webhook
+- Tester facture-scanner end-to-end (image → Drive + Sheets)
 - E17 — Mission Control WebSocket (temps réel)
+- E15 — Migration NUC N150 / CasaOS (production)
 
 ---
 

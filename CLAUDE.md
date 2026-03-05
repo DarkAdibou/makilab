@@ -30,6 +30,7 @@ Même cerveau, mêmes capacités sur tous les canaux.
 - `PROGRESS.md` — état exact de chaque epic/story (SOURCE DE VÉRITÉ)
 - `docs/plans/2026-02-28-makilab-agent-design.md` — design complet v3
 - `docs/plans/2026-02-28-e1-foundation.md` — plan implémentation E1
+- `docs/llm-routing.md` — architecture LLM routing (TaskTypes, providers, conversion modèles)
 - `docker-compose.yml` — infra locale
 
 ## Règles non-négociables (sécurité)
