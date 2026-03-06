@@ -153,3 +153,13 @@ export async function deleteByIds(collection: string, ids: string[]): Promise<vo
   if (!c || ids.length === 0) return;
   await c.delete(collection, { points: ids });
 }
+
+/** Delete all points matching a channel from conversations collection. Returns count deleted. */
+export async function deleteConversationsByChannel(channel: string): Promise<number> {
+  const c = getClient();
+  if (!c) return 0;
+  const result = await c.delete(CONVERSATIONS_COLLECTION, {
+    filter: { must: [{ key: 'channel', match: { value: channel } }] },
+  });
+  return typeof result === 'object' && result !== null ? 1 : 0;
+}

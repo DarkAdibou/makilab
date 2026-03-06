@@ -796,7 +796,7 @@ export function getAllPermissions(): Array<{ subagent: string; action: string; l
 /** Get all core facts — injected into every system prompt */
 export function getCoreMemory(): Record<string, string> {
   const db = getDb();
-  const rows = db.prepare('SELECT key, value FROM core_memory').all() as Array<{ key: string; value: string }>;
+  const rows = db.prepare('SELECT key, value FROM core_memory ORDER BY updated_at DESC').all() as Array<{ key: string; value: string }>;
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
@@ -896,6 +896,18 @@ export function deleteMessagesUpTo(channel: string, upToId: number): void {
   getDb().prepare(
     'DELETE FROM messages WHERE channel = ? AND id <= ?'
   ).run(channel, upToId);
+}
+
+/** Clear all messages for a channel. Returns the number of deleted rows. */
+export function clearChannelMessages(channel: string): number {
+  const result = getDb().prepare('DELETE FROM messages WHERE channel = ?').run(channel);
+  return (result as unknown as { changes: number }).changes;
+}
+
+/** Clear all summaries for a channel. Returns the number of deleted rows. */
+export function clearChannelSummaries(channel: string): number {
+  const result = getDb().prepare('DELETE FROM summaries WHERE channel = ?').run(channel);
+  return (result as unknown as { changes: number }).changes;
 }
 
 /** Get the oldest N messages for a channel (used for compaction) */

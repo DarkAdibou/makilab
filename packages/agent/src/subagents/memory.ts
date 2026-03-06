@@ -11,7 +11,8 @@ import { logger } from '../logger.ts';
 import type { SubAgent, SubAgentResult } from './types.ts';
 import { embedText } from '../memory/embeddings.ts';
 import { semanticSearch, upsertKnowledge, deleteByIds, CONVERSATIONS_COLLECTION, KNOWLEDGE_COLLECTION } from '../memory/qdrant.ts';
-import { getCoreMemory, deleteFact, searchMessagesFullText } from '../memory/sqlite.ts';
+import { getCoreMemory, deleteFact, searchMessagesFullText, clearChannelMessages, clearChannelSummaries, countMessages } from '../memory/sqlite.ts';
+import { deleteConversationsByChannel } from '../memory/qdrant.ts';
 
 export const memorySubAgent: SubAgent = {
   name: 'memory',
@@ -78,6 +79,22 @@ export const memorySubAgent: SubAgent = {
           topic: { type: 'string', description: 'Le sujet à oublier' },
         },
         required: ['topic'],
+      },
+    },
+    {
+      name: 'clear_history',
+      description:
+        "Efface l'historique de conversation d'un canal (messages + résumés + souvenirs Qdrant). " +
+        "IMPORTANT : Appelle d'abord avec confirm=false pour voir ce qui sera supprimé, " +
+        "puis montre le résumé à l'utilisateur et demande confirmation avant de rappeler avec confirm=true. " +
+        "Les faits durables (core_memory) sont CONSERVÉS.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          channel: { type: 'string', description: 'Le canal à nettoyer (ex: mission_control, whatsapp)' },
+          confirm: { type: 'boolean', description: "false = dry run (prévisualisation), true = suppression effective. Toujours commencer par false.", default: false },
+        },
+        required: ['channel'],
       },
     },
     {
@@ -181,6 +198,40 @@ export const memorySubAgent: SubAgent = {
           return {
             success: true,
             text: `Oublié "${topic}" : ${deletedMemories} souvenir(s) Qdrant + ${deletedFacts} fait(s) SQLite supprimés.`,
+          };
+        }
+
+        case 'clear_history': {
+          const channel = input.channel as string;
+          const confirm = input.confirm === true;
+
+          const msgCount = countMessages(channel);
+
+          if (!confirm) {
+            return {
+              success: true,
+              text: `⚠️ Dry run — voici ce qui sera supprimé pour le canal "${channel}" :\n` +
+                `- ${msgCount} message(s)\n` +
+                `- Résumés de compaction\n` +
+                `- Souvenirs Qdrant liés à ce canal\n` +
+                `- Les faits durables (core_memory) seront CONSERVÉS\n\n` +
+                `Demande confirmation à l'utilisateur avant de rappeler avec confirm=true.`,
+            };
+          }
+
+          const deletedMsgs = clearChannelMessages(channel);
+          const deletedSummaries = clearChannelSummaries(channel);
+          await deleteConversationsByChannel(channel);
+
+          logger.info({ channel, deletedMsgs, deletedSummaries }, 'Channel history cleared');
+
+          return {
+            success: true,
+            text: `Historique du canal "${channel}" effacé :\n` +
+              `- ${deletedMsgs} message(s) supprimé(s)\n` +
+              `- ${deletedSummaries} résumé(s) supprimé(s)\n` +
+              `- Souvenirs Qdrant du canal supprimés\n` +
+              `- Faits durables conservés ✓`,
           };
         }
 
